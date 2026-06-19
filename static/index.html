@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Antigravity Running Training Dashboard</title>
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- FontAwesome for Premium Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Leaflet CSS for Maps -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    
+    <!-- Local Custom CSS -->
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar">
+            <div class="sidebar-brand">
+                <i class="fa-solid fa-person-running logo-icon"></i>
+                <span class="brand-text">Strides</span>
+            </div>
+            
+            <nav class="sidebar-menu">
+                <a href="#" class="menu-item active" id="menu-dashboard">
+                    <i class="fa-solid fa-chart-line"></i>
+                    <span>Dashboard</span>
+                </a>
+                <a href="#" class="menu-item" id="menu-compare">
+                    <i class="fa-solid fa-route"></i>
+                    <span>Compare Similar Runs</span>
+                </a>
+                
+                <div class="menu-separator"></div>
+                
+                <button class="sync-btn" id="btn-sync-data">
+                    <i class="fa-solid fa-arrows-rotate"></i>
+                    <span>Sync Fitbit Data</span>
+                </button>
+            </nav>
+            
+            <div class="sidebar-footer">
+                <span class="user-name">Runner Training</span>
+                <span class="user-status"><i class="fa-solid fa-circle status-dot"></i> Connected</span>
+            </div>
+        </aside>
+        
+        <!-- Main Content Area -->
+        <main class="main-content">
+            <!-- Dashboard View Wrapper -->
+            <div id="dashboard-view">
+                <!-- Top Navigation / Header -->
+                <header class="content-header">
+                    <div class="header-title-area">
+                        <h1>Performance Dashboard</h1>
+                        <p class="header-subtitle">Visualize your training progress and cardiovascular improvements over time.</p>
+                    </div>
+                </header>
+                
+                <!-- Statistics Overview Cards -->
+                <section class="metrics-grid">
+                    <div class="metric-card glass">
+                        <div class="metric-icon-wrapper blue">
+                            <i class="fa-solid fa-road"></i>
+                        </div>
+                        <div class="metric-data">
+                            <span class="metric-label">Total Distance</span>
+                            <h2 class="metric-value" id="stat-total-distance">-- mi</h2>
+                        </div>
+                    </div>
+                    
+                    <div class="metric-card glass">
+                        <div class="metric-icon-wrapper purple">
+                            <i class="fa-solid fa-calendar-check"></i>
+                        </div>
+                        <div class="metric-data">
+                            <span class="metric-label">Total Runs</span>
+                            <h2 class="metric-value" id="stat-total-runs">--</h2>
+                        </div>
+                    </div>
+                    
+                    <div class="metric-card glass">
+                        <div class="metric-icon-wrapper green">
+                            <i class="fa-solid fa-gauge-high"></i>
+                        </div>
+                        <div class="metric-data">
+                            <span class="metric-label">Avg Pace</span>
+                            <h2 class="metric-value" id="stat-avg-pace">-- /mi</h2>
+                        </div>
+                    </div>
+                    
+                    <div class="metric-card glass">
+                        <div class="metric-icon-wrapper red">
+                            <i class="fa-solid fa-heartbeat"></i>
+                        </div>
+                        <div class="metric-data">
+                            <span class="metric-label">Avg Heart Rate</span>
+                            <h2 class="metric-value" id="stat-avg-hr">-- bpm</h2>
+                        </div>
+                    </div>
+                </section>
+                
+                <!-- Main Chart & Visualization Controls -->
+                <section class="chart-section glass">
+                    <div class="chart-header">
+                        <div class="tab-controls">
+                            <button class="tab-btn active" data-chart="progress">
+                                <i class="fa-solid fa-chart-line"></i> Fitness Progress
+                            </button>
+                            <button class="tab-btn" data-chart="efficiency">
+                                <i class="fa-solid fa-bolt"></i> Aerobic Efficiency
+                            </button>
+                            <button class="tab-btn" data-chart="distPace">
+                                <i class="fa-solid fa-circle-nodes"></i> Pace vs Distance
+                            </button>
+                            <button class="tab-btn" data-chart="progressCurves">
+                                <i class="fa-solid fa-route"></i> Pace Comparison
+                            </button>
+                            <button class="tab-btn" data-chart="volume">
+                                <i class="fa-solid fa-chart-bar"></i> Weekly Volume
+                            </button>
+                            <button class="tab-btn" data-chart="form">
+                                <i class="fa-solid fa-shoe-prints"></i> Biomechanics
+                            </button>
+                        </div>
+                        <!-- Vertical separator and Metric toggles for Fitness Progress -->
+                        <div class="header-separator" id="metric-toggles-separator"></div>
+                        <div class="metric-toggles" id="progress-metric-toggles">
+                            <button class="toggle-pill active" id="toggle-pace" data-metric="pace">
+                                <i class="fa-solid fa-gauge-high"></i> Pace
+                            </button>
+                            <button class="toggle-pill active" id="toggle-hr" data-metric="hr">
+                                <i class="fa-solid fa-heartbeat"></i> Heart Rate
+                            </button>
+                            <button class="toggle-pill active" id="toggle-dist" data-metric="dist">
+                                <i class="fa-solid fa-road"></i> Distance
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Dynamic Glassmorphic Filter Controls -->
+                    <div class="filter-controls-bar">
+                        <div class="filter-group">
+                            <i class="fa-solid fa-calendar-days"></i>
+                            <label for="filter-start-date">From:</label>
+                            <input type="date" id="filter-start-date" class="filter-input">
+                        </div>
+                        
+                        <div class="filter-group">
+                            <label for="filter-end-date">To:</label>
+                            <input type="date" id="filter-end-date" class="filter-input">
+                        </div>
+                        
+                        <div class="filter-group slider-group">
+                            <i class="fa-solid fa-ruler-horizontal"></i>
+                            <span class="filter-label">Distance:</span>
+                            <div class="dual-range-slider">
+                                <div class="slider-track-bg"></div>
+                                <div class="slider-track-fill" id="slider-track-fill"></div>
+                                <input type="range" id="filter-min-dist" min="0" max="10" step="0.1" value="0">
+                                <input type="range" id="filter-max-dist" min="0" max="10" step="0.1" value="10">
+                            </div>
+                            <span class="slider-value" id="dist-slider-value">0.0 - 10.0 mi</span>
+                        </div>
+                        
+                        <button id="btn-reset-filters" class="filter-btn">
+                            <i class="fa-solid fa-arrows-rotate"></i> Reset
+                        </button>
+                    </div>
+                    
+                    <!-- Custom Gradient Legend for Pace vs Distance -->
+                    <div class="chart-legend-container" id="custom-legend-container" style="display: none; justify-content: center; align-items: center; gap: 12px; margin-bottom: 20px;">
+                        <span class="legend-label" style="font-size: 12px; color: var(--text-muted); font-family: var(--font-inter);">Earlier (Dec 2025)</span>
+                        <div class="color-gradient-bar" style="width: 240px; height: 8px; border-radius: 4px; background: linear-gradient(to right, hsl(270, 85%, 60%), hsl(230, 85%, 60%), hsl(195, 85%, 60%)); border: 1px solid rgba(255, 255, 255, 0.1);"></div>
+                        <span class="legend-label" style="font-size: 12px; color: var(--text-muted); font-family: var(--font-inter);">Recent (Jun 2026)</span>
+                    </div>
+                    
+                    <div class="chart-container">
+                        <canvas id="mainChart"></canvas>
+                    </div>
+                </section>
+                
+                <!-- Runs History Table -->
+                <section class="history-section glass">
+                    <div class="section-header">
+                        <h2>Training History</h2>
+                        <span class="badge" id="runs-count">-- Runs</span>
+                    </div>
+                    
+                    <div class="table-wrapper">
+                        <table class="history-table" id="history-table">
+                            <thead>
+                                <tr>
+                                    <th data-sort="date" style="cursor: pointer;">Date <i class="fa-solid fa-sort"></i></th>
+                                    <th data-sort="distance_mi" style="cursor: pointer;">Distance <i class="fa-solid fa-sort"></i></th>
+                                    <th data-sort="duration_sec" style="cursor: pointer;">Duration <i class="fa-solid fa-sort"></i></th>
+                                    <th data-sort="pace_sec_mi" style="cursor: pointer;">Avg Pace <i class="fa-solid fa-sort"></i></th>
+                                    <th data-sort="avg_hr" style="cursor: pointer;">Avg Heart Rate <i class="fa-solid fa-sort"></i></th>
+                                    <th data-sort="cadence" style="cursor: pointer;">Cadence <i class="fa-solid fa-sort"></i></th>
+                                    <th data-sort="stride_cm" style="cursor: pointer;">Stride Length <i class="fa-solid fa-sort"></i></th>
+                                    <th class="text-right">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="runs-table-body">
+                                <tr>
+                                    <td colspan="8" class="text-center">Loading training history data...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+            </div>
+
+            <!-- Compare Similar Runs View Wrapper -->
+            <div id="compare-view" style="display: none;">
+                <!-- Header -->
+                <header class="content-header">
+                    <div class="header-title-area">
+                        <h1>Compare Similar Runs</h1>
+                        <p class="header-subtitle">Select a run and compare it against other runs along the same route.</p>
+                    </div>
+                </header>
+
+                <!-- Comparison Controls -->
+                <section class="compare-controls glass">
+                    <div class="compare-controls-grid">
+                        <div class="compare-ctrl-group">
+                            <label for="compare-run-select"><i class="fa-solid fa-person-running"></i> Run of Interest</label>
+                            <select id="compare-run-select" class="compare-select">
+                                <option value="">Loading available runs...</option>
+                            </select>
+                        </div>
+                        
+                        <div class="compare-ctrl-group">
+                            <label><i class="fa-solid fa-route"></i> Match Type</label>
+                            <div class="match-type-toggles">
+                                <button class="toggle-pill active" id="match-type-general" data-type="general">
+                                    General Route
+                                </button>
+                                <button class="toggle-pill" id="match-type-exact" data-type="exact">
+                                    Exact Route
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="compare-ctrl-group slider-group-compare">
+                            <div class="slider-label-row">
+                                <label for="compare-threshold"><i class="fa-solid fa-circle-nodes"></i> Similarity Threshold</label>
+                                <span class="slider-value-badge" id="compare-threshold-val">75%</span>
+                            </div>
+                            <input type="range" id="compare-threshold" class="compare-slider" min="0" max="100" value="75" step="1">
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Overview Summary Cards -->
+                <section class="metrics-grid margin-top-24">
+                    <!-- Selected Run Stats -->
+                    <div class="metric-card glass comparison-metric-card border-selected-run">
+                        <div class="metric-icon-wrapper red">
+                            <i class="fa-solid fa-stopwatch"></i>
+                        </div>
+                        <div class="metric-data">
+                            <span class="metric-label">Selected Run Stats</span>
+                            <div class="comparison-stats-row">
+                                <div><span class="stat-num" id="comp-sel-dist">--</span> <span class="stat-unit">mi</span></div>
+                                <div><span class="stat-num" id="comp-sel-pace">--</span> <span class="stat-unit">/mi</span></div>
+                                <div><span class="stat-num" id="comp-sel-hr">--</span> <span class="stat-unit">bpm</span></div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Similar Runs Average Stats -->
+                    <div class="metric-card glass comparison-metric-card border-average-run">
+                        <div class="metric-icon-wrapper purple">
+                            <i class="fa-solid fa-calculator"></i>
+                        </div>
+                        <div class="metric-data">
+                            <span class="metric-label">Similar Runs Average</span>
+                            <div class="comparison-stats-row">
+                                <div><span class="stat-num" id="comp-avg-dist">--</span> <span class="stat-unit">mi</span></div>
+                                <div><span class="stat-num" id="comp-avg-pace">--</span> <span class="stat-unit">/mi</span></div>
+                                <div><span class="stat-num" id="comp-avg-hr">--</span> <span class="stat-unit">bpm</span></div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Mile Splits Heatmap Vector Comparison Card -->
+                <section class="splits-vector-section glass margin-top-24">
+                    <div class="section-header">
+                        <h2><i class="fa-solid fa-chart-simple"></i> Mile Splits Heatmap Profile Comparison</h2>
+                        <span class="badge" id="compare-included-count">-- Similar Runs</span>
+                    </div>
+
+                    <div class="vector-bar-container">
+                        <!-- Target Run Vector -->
+                        <div class="vector-bar-wrapper">
+                            <div class="vector-bar-title">
+                                <span><i class="fa-solid fa-person-running text-red"></i> Selected Run Splits</span>
+                                <span id="vector-title-selected-desc">--</span>
+                            </div>
+                            <div class="vector-bar" id="vector-bar-selected">
+                                <div class="vector-empty-message">Select a run above to view splits heatmap.</div>
+                            </div>
+                        </div>
+
+                        <!-- Average Run Vector -->
+                        <div class="vector-bar-wrapper">
+                            <div class="vector-bar-title">
+                                <span><i class="fa-solid fa-calculator text-purple"></i> Average of Similar Runs Splits</span>
+                                <span id="vector-title-average-desc">--</span>
+                            </div>
+                            <div class="vector-bar" id="vector-bar-average">
+                                <div class="vector-empty-message">Select a run above to view splits heatmap.</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Color Scale Legend -->
+                    <div class="heatmap-legend">
+                        <span class="legend-label cool-text"><i class="fa-solid fa-wind"></i> Slow: <span id="legend-slow-val">10:30 /mi</span></span>
+                        <div class="legend-gradient-bar"></div>
+                        <span class="legend-label warm-text"><span id="legend-fast-val">7:30 /mi</span> :Fast <i class="fa-solid fa-fire"></i></span>
+                    </div>
+                </section>
+
+                <!-- Similar Runs History Plotting -->
+                <section class="compare-chart-section glass margin-top-24" id="compare-chart-section">
+                    <div class="chart-header">
+                        <div class="chart-header-title">
+                            <h2><i class="fa-solid fa-chart-line"></i> Performance Trends over Time</h2>
+                            <p class="section-subtitle" style="font-size: 12px; color: var(--text-muted); margin-top: 4px; font-family: var(--font-inter);">Track metric history of matching runs. Selected run of interest is highlighted in red.</p>
+                        </div>
+                        <div class="tab-controls compare-chart-tabs" id="compare-chart-tabs">
+                            <button class="tab-btn active" data-compare-metric="distance_mi">
+                                <i class="fa-solid fa-road"></i> Distance
+                            </button>
+                            <button class="tab-btn" data-compare-metric="duration_sec">
+                                <i class="fa-solid fa-stopwatch"></i> Duration
+                            </button>
+                            <button class="tab-btn" data-compare-metric="pace_sec_mi">
+                                <i class="fa-solid fa-gauge-high"></i> Avg Pace
+                            </button>
+                            <button class="tab-btn" data-compare-metric="avg_hr">
+                                <i class="fa-solid fa-heartbeat"></i> Avg HR
+                            </button>
+                        </div>
+                    </div>
+                    <div class="chart-container" style="height: 320px; position: relative; margin-top: 20px;">
+                        <canvas id="compareChartCanvas"></canvas>
+                        <div class="compare-chart-empty" id="compare-chart-empty" style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(15, 23, 42, 0.45); backdrop-filter: blur(4px); border-radius: 12px; font-size: 15px; color: var(--text-muted); font-family: var(--font-inter); z-index: 10;">
+                            Select a run of interest above to plot similarity trends.
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Similar Runs History Table -->
+                <section class="history-section glass margin-top-24">
+                    <div class="section-header">
+                        <h2>Similar Runs Details</h2>
+                    </div>
+                    
+                    <div class="table-wrapper">
+                        <table class="history-table" id="compare-table">
+                            <thead>
+                                <tr>
+                                    <th data-sort="date" style="cursor: pointer;">Date <i class="fa-solid fa-sort"></i></th>
+                                    <th data-sort="distance_mi" style="cursor: pointer;">Distance <i class="fa-solid fa-sort"></i></th>
+                                    <th data-sort="duration_sec" style="cursor: pointer;">Duration <i class="fa-solid fa-sort"></i></th>
+                                    <th data-sort="pace_sec_mi" style="cursor: pointer;">Avg Pace <i class="fa-solid fa-sort"></i></th>
+                                    <th data-sort="avg_hr" style="cursor: pointer;">Avg Heart Rate <i class="fa-solid fa-sort"></i></th>
+                                    <th data-sort="similarity" style="cursor: pointer;">Similarity <i class="fa-solid fa-sort"></i></th>
+                                    <th style="width: 250px;">Mile Splits Heatmap</th>
+                                    <th class="text-right">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="compare-runs-table-body">
+                                <tr>
+                                    <td colspan="8" class="text-center">Select a run of interest to find similar runs.</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <!-- Run Details Modal Overlay -->
+    <div class="modal-overlay" id="run-modal">
+        <div class="modal-card glass">
+            <!-- Modal Header -->
+            <header class="modal-header">
+                <div class="modal-title-group">
+                    <h2 id="modal-run-date">June 4, 2026</h2>
+                    <span class="modal-run-time" id="modal-run-time">14:30</span>
+                </div>
+                <button class="close-btn" id="modal-close-btn">&times;</button>
+            </header>
+            
+            <!-- Modal Content Grid -->
+            <div class="modal-grid">
+                <!-- Left: Route Map & Splits -->
+                <div class="modal-left">
+                    <!-- Map Box -->
+                    <div class="map-card">
+                        <div class="map-header">
+                            <h3><i class="fa-solid fa-map-location-dot"></i> GPS Route</h3>
+                            <span class="gps-badge" id="gps-status"><i class="fa-solid fa-location-arrow"></i> Active</span>
+                        </div>
+                        <div class="map-wrapper">
+                            <div id="map"></div>
+                            <div class="map-placeholder" id="map-placeholder">
+                                <i class="fa-solid fa-circle-exclamation"></i>
+                                <p>GPS Route not available for this run.</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Splits -->
+                    <div class="splits-card">
+                        <h3><i class="fa-solid fa-list-ol"></i> Mile Splits</h3>
+                        <div class="splits-chart-container">
+                            <canvas id="splitsChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Right: Stats, Heart Rate Series, and Zones -->
+                <div class="modal-right">
+                    <!-- Metrics Summary -->
+                    <div class="modal-metrics-grid">
+                        <div class="m-card">
+                            <span class="m-label">Distance</span>
+                            <span class="m-val" id="modal-dist">-- mi</span>
+                        </div>
+                        <div class="m-card">
+                            <span class="m-label">Duration</span>
+                            <span class="m-val" id="modal-dur">--</span>
+                        </div>
+                        <div class="m-card">
+                            <span class="m-label">Pace</span>
+                            <span class="m-val" id="modal-pace">-- /mi</span>
+                        </div>
+                        <div class="m-card">
+                            <span class="m-label">Avg HR</span>
+                            <span class="m-val" id="modal-hr">-- bpm</span>
+                        </div>
+                        <div class="m-card">
+                            <span class="m-label">Cadence</span>
+                            <span class="m-val" id="modal-cadence">-- spm</span>
+                        </div>
+                        <div class="m-card">
+                            <span class="m-label">Stride</span>
+                            <span class="m-val" id="modal-stride">-- cm</span>
+                        </div>
+                    </div>
+                    
+                    <!-- Intraday HR Time-Series -->
+                    <div class="hr-series-card">
+                        <h3><i class="fa-solid fa-heart-pulse"></i> Heart Rate Profile</h3>
+                        <div class="hr-chart-container">
+                            <canvas id="hrChart"></canvas>
+                        </div>
+                    </div>
+                    
+                    <!-- HR Zone Distribution -->
+                    <div class="hr-zones-card">
+                        <h3><i class="fa-solid fa-chart-pie"></i> Intensity Zones</h3>
+                        <div class="zones-wrapper">
+                            <div class="zone-row" id="zone-peak">
+                                <div class="zone-info">
+                                    <span class="z-name">Peak (90%+)</span>
+                                    <span class="z-dur" id="dur-peak">0:00</span>
+                                </div>
+                                <div class="progress-bar-bg"><div class="progress-bar red" id="bar-peak" style="width: 0%"></div></div>
+                            </div>
+                            <div class="zone-row" id="zone-vigorous">
+                                <div class="zone-info">
+                                    <span class="z-name">Vigorous (80-89%)</span>
+                                    <span class="z-dur" id="dur-vigorous">0:00</span>
+                                </div>
+                                <div class="progress-bar-bg"><div class="progress-bar orange" id="bar-vigorous" style="width: 0%"></div></div>
+                            </div>
+                            <div class="zone-row" id="zone-moderate">
+                                <div class="zone-info">
+                                    <span class="z-name">Moderate (70-79%)</span>
+                                    <span class="z-dur" id="dur-moderate">0:00</span>
+                                </div>
+                                <div class="progress-bar-bg"><div class="progress-bar yellow" id="bar-moderate" style="width: 0%"></div></div>
+                            </div>
+                            <div class="zone-row" id="zone-light">
+                                <div class="zone-info">
+                                    <span class="z-name">Light (50-69%)</span>
+                                    <span class="z-dur" id="dur-light">0:00</span>
+                                </div>
+                                <div class="progress-bar-bg"><div class="progress-bar blue" id="bar-light" style="width: 0%"></div></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- External CDNs: Chart.js and Leaflet -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    
+    <!-- Local Custom JS -->
+    <script src="app.js"></script>
+</body>
+</html>

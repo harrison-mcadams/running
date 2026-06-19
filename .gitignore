@@ -1,0 +1,22 @@
+# Credentials & Secrets
+credentials.json
+.env
+
+# Local Fitbit/Google Health Connect Data Caches
+*.csv
+run_heart_rates/
+run_routes/
+
+# Python environment & cache files
+__pycache__/
+*.pyc
+.venv/
+env/
+venv/
+
+# Editor & System Files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+scratch/
