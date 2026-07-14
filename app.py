@@ -308,7 +308,7 @@ def auth_google():
             f"client_id={client_id}&"
             f"redirect_uri={redirect_uri}&"
             "response_type=code&"
-            "scope=https://www.googleapis.com/auth/googlehealth.activity_and_fitness.readonly%20https://www.googleapis.com/auth/googlehealth.health_metrics_and_measurements.readonly&"
+            "scope=https://www.googleapis.com/auth/googlehealth.activity_and_fitness.readonly%20https://www.googleapis.com/auth/googlehealth.health_metrics_and_measurements.readonly%20https://www.googleapis.com/auth/googlehealth.location.readonly&"
             "access_type=offline&"
             "prompt=consent"
         )
