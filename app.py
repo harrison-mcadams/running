@@ -2,7 +2,7 @@ import ast
 import json
 import os
 import xml.etree.ElementTree as ET
-from flask import Flask, jsonify, send_from_directory
+from flask import Flask, jsonify, send_from_directory, request, redirect
 import pandas as pd
 import math
 
@@ -268,9 +268,145 @@ def sync_data():
         return jsonify({"success": True, "output": result.stdout})
     except subprocess.CalledProcessError as e:
         print("Data sync script failed. Error:\n", e.stderr)
-        return jsonify({"success": False, "error": e.stderr, "output": e.stdout}), 500
+        error_msg = "Data sync failed."
+        if e.stderr:
+            lines = e.stderr.splitlines()
+            idx = -1
+            for i in range(len(lines) - 1, -1, -1):
+                if lines[i].startswith("Exception:"):
+                    idx = i
+                    break
+            if idx != -1:
+                error_msg = "\n".join(lines[idx:])
+                if error_msg.startswith("Exception:"):
+                    error_msg = error_msg[len("Exception:"):].strip()
+            else:
+                error_msg = e.stderr.strip().splitlines()[-1] if e.stderr.strip() else "Subprocess failed."
+        return jsonify({"success": False, "error": error_msg, "output": e.stdout}), 500
     except Exception as e:
         print("Data sync failed with error:", str(e))
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/auth/google')
+def auth_google():
+    credentials_path = os.path.join(BASE_DIR, 'credentials.json')
+    if not os.path.exists(credentials_path):
+        return jsonify({"error": "credentials.json not found on server"}), 400
+    try:
+        with open(credentials_path, 'r') as f:
+            creds = json.load(f)
+        client_id = creds.get("client_id")
+        if not client_id:
+            return jsonify({"error": "client_id not configured in credentials.json"}), 400
+        
+        # Build redirect URI dynamically
+        redirect_uri = f"{request.scheme}://{request.host}/api/auth/google/callback"
+        
+        auth_url = (
+            "https://accounts.google.com/o/oauth2/v2/auth?"
+            f"client_id={client_id}&"
+            f"redirect_uri={redirect_uri}&"
+            "response_type=code&"
+            "scope=https://www.googleapis.com/auth/googlehealth.activity_and_fitness.readonly&"
+            "access_type=offline&"
+            "prompt=consent"
+        )
+        return redirect(auth_url)
+    except Exception as e:
+        return jsonify({"error": f"Failed to initiate OAuth: {str(e)}"}), 500
+
+
+@app.route('/api/auth/google/callback')
+def auth_google_callback():
+    import requests
+    code = request.args.get('code')
+    error = request.args.get('error')
+    if error:
+        return f"OAuth Error: {error}. Please close this window and try again."
+    if not code:
+        return "Authorization code not found. Please try again."
+
+    credentials_path = os.path.join(BASE_DIR, 'credentials.json')
+    if not os.path.exists(credentials_path):
+        return "credentials.json not found on server."
+        
+    try:
+        with open(credentials_path, 'r') as f:
+            creds = json.load(f)
+        client_id = creds.get("client_id")
+        client_secret = creds.get("client_secret")
+        
+        redirect_uri = f"{request.scheme}://{request.host}/api/auth/google/callback"
+        
+        url = "https://oauth2.googleapis.com/token"
+        data = {
+            "code": code,
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "redirect_uri": redirect_uri,
+            "grant_type": "authorization_code"
+        }
+        res = requests.post(url, data=data)
+        if res.status_code == 200:
+            tokens = res.json()
+            refresh_token = tokens.get("refresh_token")
+            
+            if refresh_token:
+                creds["refresh_token"] = refresh_token
+            
+            with open(credentials_path, 'w') as f:
+                json.dump(creds, f, indent=2)
+                
+            return """
+            <html>
+                <body style="font-family: sans-serif; text-align: center; padding: 50px; background-color: #080c14; color: #f8fafc;">
+                    <div style="max-width: 500px; margin: 0 auto; background: rgba(15, 23, 42, 0.65); border: 1px solid rgba(255, 255, 255, 0.08); padding: 30px; border-radius: 16px; box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37); backdrop-filter: blur(8px);">
+                        <h2 style="color: #34d399; margin-bottom: 20px; font-family: sans-serif;">✓ Authentication Successful</h2>
+                        <p style="font-size: 16px; line-height: 1.6; color: #94a3b8;">
+                            Google API access has been successfully authorized and your credentials file has been updated.
+                        </p>
+                        <p style="font-size: 14px; color: #94a3b8; margin-top: 20px;">
+                            You can now close this tab and click <strong>Sync Fitbit Data</strong> on the dashboard.
+                        </p>
+                        <button onclick="window.close();" style="margin-top: 20px; padding: 12px 24px; font-size: 14px; background: linear-gradient(135deg, rgba(56, 189, 248, 0.2), rgba(52, 211, 153, 0.2)); border: 1px solid rgba(52, 211, 153, 0.4); color: white; border-radius: 8px; cursor: pointer; font-weight: bold; transition: all 0.3s ease;">
+                            Close Window
+                        </button>
+                    </div>
+                </body>
+            </html>
+            """
+        else:
+            return f"Failed to exchange token ({res.status_code}): {res.text}"
+    except Exception as e:
+        return f"Error during token exchange: {str(e)}"
+
+
+@app.route('/api/auth/save-token', methods=['POST'])
+def save_token():
+    try:
+        data = request.get_json()
+        if not data or 'refresh_token' not in data:
+            return jsonify({"success": False, "error": "refresh_token is required"}), 400
+            
+        refresh_token = data['refresh_token'].strip()
+        if not refresh_token:
+            return jsonify({"success": False, "error": "refresh_token cannot be empty"}), 400
+            
+        credentials_path = os.path.join(BASE_DIR, 'credentials.json')
+        if not os.path.exists(credentials_path):
+            return jsonify({"success": False, "error": "credentials.json not found on server"}), 400
+            
+        with open(credentials_path, 'r') as f:
+            creds = json.load(f)
+            
+        creds['refresh_token'] = refresh_token
+        
+        with open(credentials_path, 'w') as f:
+            json.dump(creds, f, indent=2)
+            
+        return jsonify({"success": True, "message": "Refresh token updated successfully!"})
+    except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
 

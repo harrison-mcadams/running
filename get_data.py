@@ -31,9 +31,11 @@ def get_headers():
                 token = res.json().get("access_token")
                 print("Successfully refreshed Google API access token using refresh token.")
             else:
-                print(f"Warning: Failed to refresh token ({res.status_code}): {res.text}")
+                raise Exception(f"OAuth token refresh failed ({res.status_code}): {res.text}")
         except Exception as e:
-            print(f"Warning: Failed to refresh token from credentials.json: {e}")
+            raise Exception(f"Failed to refresh Google API token: {str(e)}")
+    elif not token:
+        raise Exception("No API credentials or access token found. Please configure credentials.")
             
     return {
         "Authorization": f"Bearer {token}",
@@ -67,8 +69,7 @@ def get_recent_exercises():
             if not page_token:
                 break
         else:
-            print(f"Error fetching exercises ({response.status_code}): {response.text}")
-            break
+            raise Exception(f"Error fetching exercises ({response.status_code}): {response.text}")
 
     if not all_points:
         print("No exercise data points found.")
@@ -122,8 +123,7 @@ def download_run_heart_rates(df):
 
             response = requests.get(url, headers=headers, params=params)
             if response.status_code != 200:
-                print(f"  Error fetching HR: {response.status_code} - {response.text}")
-                break
+                raise Exception(f"Error fetching HR ({response.status_code}): {response.text}")
 
             data = response.json()
             points = data.get("dataPoints", [])
@@ -177,7 +177,7 @@ def download_run_tcx_routes(df):
             with open(out_path, "w", encoding="utf-8") as f:
                 json.dump({"tcxData": tcx_data}, f, indent=2)
         else:
-            print(f"  Error fetching GPS route: {response.status_code} - {response.text}")
+            raise Exception(f"Error fetching GPS route ({response.status_code}): {response.text}")
 
 
 def get_heart_rate_samples():
@@ -197,8 +197,7 @@ def get_heart_rate_samples():
         df = pd.json_normalize(points)
         return df
     else:
-        print(f"Error fetching heart rate ({response.status_code}): {response.text}")
-        return None
+        raise Exception(f"Error fetching heart rate ({response.status_code}): {response.text}")
 
 
 # --- Execution Flow ---

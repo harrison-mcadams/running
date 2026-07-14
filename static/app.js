@@ -347,11 +347,16 @@ function setupSyncBtnListener() {
             if (data.success) {
                 alert('Fitbit data sync completed successfully!');
             } else {
-                alert('Sync failed: ' + (data.error || 'Unknown error'));
+                const errMsg = data.error || 'Unknown error';
+                if (confirm(`Sync failed: ${errMsg}\n\nWould you like to open the API Credentials settings to authorize or update your token?`)) {
+                    showCredentialsModal();
+                }
             }
         } catch (e) {
             console.error('Error syncing:', e);
-            alert('Error syncing data: ' + e.message);
+            if (confirm(`Error syncing data: ${e.message}\n\nWould you like to open the API Credentials settings to authorize or update your token?`)) {
+                showCredentialsModal();
+            }
         } finally {
             btn.disabled = false;
             btn.classList.remove('loading');
@@ -360,6 +365,98 @@ function setupSyncBtnListener() {
             initDashboard();
         }
     });
+}
+
+// Credentials/Settings Modal Toggle
+function showCredentialsModal() {
+    const modal = document.getElementById('settings-modal');
+    if (modal) {
+        modal.style.display = 'flex';
+        setTimeout(() => modal.classList.add('active'), 10);
+        modal.style.pointerEvents = 'auto';
+    }
+}
+
+function hideCredentialsModal() {
+    const modal = document.getElementById('settings-modal');
+    if (modal) {
+        modal.classList.remove('active');
+        setTimeout(() => {
+            modal.style.display = 'none';
+            modal.style.pointerEvents = 'none';
+        }, 300);
+    }
+}
+
+function setupCredentialsModalListeners() {
+    const btnSettings = document.getElementById('btn-api-settings');
+    const btnClose = document.getElementById('settings-close-btn');
+    const modal = document.getElementById('settings-modal');
+    
+    if (btnSettings) {
+        btnSettings.addEventListener('click', showCredentialsModal);
+    }
+    
+    if (btnClose) {
+        btnClose.addEventListener('click', hideCredentialsModal);
+    }
+    
+    // Close on overlay click
+    if (modal) {
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                hideCredentialsModal();
+            }
+        });
+    }
+    
+    // OAuth Sign in button
+    const btnOAuth = document.getElementById('btn-oauth-signin');
+    if (btnOAuth) {
+        btnOAuth.addEventListener('click', () => {
+            window.open('/api/auth/google', 'GoogleHealthAuth', 'width=600,height=700,status=no,toolbar=no,menubar=no');
+        });
+    }
+    
+    // Manual token save button
+    const btnSaveToken = document.getElementById('btn-save-token');
+    const inputToken = document.getElementById('manual-refresh-token');
+    
+    if (btnSaveToken && inputToken) {
+        btnSaveToken.addEventListener('click', async () => {
+            const tokenVal = inputToken.value.trim();
+            if (!tokenVal) {
+                alert('Please enter a valid refresh token.');
+                return;
+            }
+            
+            btnSaveToken.disabled = true;
+            const originalSaveText = btnSaveToken.querySelector('span').textContent;
+            btnSaveToken.querySelector('span').textContent = 'Saving...';
+            
+            try {
+                const res = await fetch('/api/auth/save-token', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ refresh_token: tokenVal })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    alert('Refresh token updated successfully! You can now close the settings panel and sync your data.');
+                    inputToken.value = '';
+                    hideCredentialsModal();
+                } else {
+                    alert('Failed to save token: ' + (data.error || 'Unknown error'));
+                }
+            } catch (e) {
+                console.error('Error saving token:', e);
+                alert('Error saving token: ' + e.message);
+            } finally {
+                btnSaveToken.disabled = false;
+                btnSaveToken.querySelector('span').textContent = originalSaveText;
+            }
+        });
+    }
 }
 
 // Fetch all runs and initialize dashboard
@@ -389,6 +486,7 @@ async function initDashboard() {
             initCompareView();
             setupTableSortListeners();
             setupSyncBtnListener();
+            setupCredentialsModalListeners();
             listenersInitialized = true;
         }
 
