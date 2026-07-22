@@ -54,7 +54,7 @@ def get_recent_exercises():
 
     print("Fetching tracked exercises with pagination...")
     while True:
-        params = {"pageSize": 2000}
+        params = {}
         if page_token:
             params["pageToken"] = page_token
 
