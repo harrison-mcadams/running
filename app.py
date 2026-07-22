@@ -161,8 +161,8 @@ def _load_runs_from_csv():
             pace_sec_mi = 0
             pace_str = "N/A"
 
-        # Filter out accidental runs (< 0.5 miles) and very slow outlier runs (> 10:30 min/mi)
-        if dist_mi < 0.5 or (pace_sec_mi > 0 and pace_sec_mi > 630):
+        # Filter out accidental runs (< 0.5 miles) and very slow outlier activities (> 15:00 min/mi)
+        if dist_mi < 0.5 or (pace_sec_mi > 0 and pace_sec_mi > 900):
             continue
 
         avg_hr = row.get(
@@ -672,7 +672,7 @@ def get_progress_curves():
             )
 
             # Apply identical filters
-            if dist_mi < 0.5 or (pace_sec_mi > 0 and pace_sec_mi > 630):
+            if dist_mi < 0.5 or (pace_sec_mi > 0 and pace_sec_mi > 900):
                 continue
 
             # Find route file

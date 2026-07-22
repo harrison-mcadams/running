@@ -54,7 +54,7 @@ def get_recent_exercises():
 
     print("Fetching tracked exercises with pagination...")
     while True:
-        params = {}
+        params = {"pageSize": 2000}
         if page_token:
             params["pageToken"] = page_token
 
@@ -81,6 +81,35 @@ def get_recent_exercises():
     return df
 
 
+def save_exercises(new_df, csv_path="my_exercises.csv"):
+    """Merges newly fetched exercises with existing CSV to prevent loss of historical data."""
+    if new_df is None or new_df.empty:
+        if os.path.exists(csv_path):
+            return pd.read_csv(csv_path)
+        return new_df
+
+    if os.path.exists(csv_path):
+        try:
+            existing_df = pd.read_csv(csv_path)
+            combined_df = pd.concat([existing_df, new_df], ignore_index=True)
+            if "name" in combined_df.columns:
+                combined_df["_run_id"] = combined_df["name"].astype(str).apply(lambda x: x.split("/")[-1])
+                combined_df = combined_df.drop_duplicates(subset=["_run_id"], keep="last").drop(columns=["_run_id"])
+            if "exercise.interval.startTime" in combined_df.columns:
+                combined_df["_sort_time"] = pd.to_datetime(combined_df["exercise.interval.startTime"], format="ISO8601")
+                combined_df = combined_df.sort_values("_sort_time").drop(columns=["_sort_time"])
+            combined_df.to_csv(csv_path, index=False)
+            print(f"Successfully merged {len(new_df)} new data points with existing exercises. Total saved: {len(combined_df)}")
+            return combined_df
+        except Exception as e:
+            print(f"Error merging exercise data: {e}. Overwriting CSV fallback.")
+            new_df.to_csv(csv_path, index=False)
+            return new_df
+    else:
+        new_df.to_csv(csv_path, index=False)
+        return new_df
+
+
 def download_run_heart_rates(df):
     """Downloads intraday heart rate data for every RUNNING exercise and caches as CSV."""
     if "exercise.exerciseType" not in df.columns:
@@ -92,7 +121,7 @@ def download_run_heart_rates(df):
         print("No running exercises found to download heart rates for.")
         return
 
-    out_dir = "run_heart_rates"
+    out_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "run_heart_rates")
     os.makedirs(out_dir, exist_ok=True)
     url = f"{BASE_URL}/users/me/dataTypes/heart-rate/dataPoints"
 
@@ -148,7 +177,7 @@ def download_run_tcx_routes(df):
     if runs.empty:
         return
 
-    out_dir = "run_routes"
+    out_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "run_routes")
     os.makedirs(out_dir, exist_ok=True)
 
     print(f"\nChecking GPS route data for {len(runs)} runs...")
@@ -205,21 +234,28 @@ if __name__ == "__main__":
     # Dynamically update headers using credentials.json if available
     headers.update(get_headers())
     
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    csv_path = os.path.join(base_dir, "my_exercises.csv")
+
     # 1. Pull exercise sessions (great for isolating specific running workouts)
     exercise_df = get_recent_exercises()
     if exercise_df is not None:
         # Display the first few workouts
         print(exercise_df.head(5))
-        # Export to CSV
-        exercise_df.to_csv("my_exercises.csv", index=False)
+        # Merge with existing CSV to prevent overwriting historical runs
+        merged_df = save_exercises(exercise_df, csv_path)
 
         # 2. Download detailed heart rate metrics and routes for each run
-        download_run_heart_rates(exercise_df)
-        download_run_tcx_routes(exercise_df)
+        download_run_heart_rates(merged_df)
+        download_run_tcx_routes(merged_df)
+    elif os.path.exists(csv_path):
+        existing_df = pd.read_csv(csv_path)
+        download_run_heart_rates(existing_df)
+        download_run_tcx_routes(existing_df)
 
     # 3. Pull raw general heart rate samples
     hr_df = get_heart_rate_samples()
     if hr_df is not None:
         print("\nFirst few heart rate data points:")
         print(hr_df.head(10))
-        hr_df.to_csv("my_heart_rate_samples.csv", index=False)
+        hr_df.to_csv(os.path.join(base_dir, "my_heart_rate_samples.csv"), index=False)
