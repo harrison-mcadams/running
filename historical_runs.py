@@ -184,33 +184,41 @@ EMBEDDED_HISTORICAL_RUNS = [
 
 def auto_heal_exercises(base_dir):
     csv_path = os.path.join(base_dir, "my_exercises.csv")
+    df_embedded = pd.DataFrame(EMBEDDED_HISTORICAL_RUNS)
 
     if not os.path.exists(csv_path):
         try:
-            df_embedded = pd.DataFrame(EMBEDDED_HISTORICAL_RUNS)
             df_embedded.to_csv(csv_path, index=False)
-            return df_embedded
-        except Exception:
-            return None
+        except Exception as e:
+            print(f"Auto-heal write error: {e}")
+        return df_embedded
 
     try:
         df_current = pd.read_csv(csv_path)
-        df_embedded = pd.DataFrame(EMBEDDED_HISTORICAL_RUNS)
-        
+    except Exception as e:
+        print(f"Auto-heal read error: {e}")
+        return df_embedded
+
+    try:
         if "name" in df_current.columns:
             current_ids = set(df_current["name"].astype(str).apply(lambda x: x.split("/")[-1]))
             df_embedded["_run_id"] = df_embedded["name"].astype(str).apply(lambda x: x.split("/")[-1])
             missing_df = df_embedded[~df_embedded["_run_id"].isin(current_ids)].copy()
 
             if not missing_df.empty:
-                print(f"Auto-heal: Merging {len(missing_df)} missing historical entries into my_exercises.csv...")
+                print(f"Auto-heal: Merging {len(missing_df)} missing historical entries...")
                 combined = pd.concat([df_current, missing_df.drop(columns=["_run_id"])], ignore_index=True)
                 if "exercise.interval.startTime" in combined.columns:
                     combined["_sort_time"] = pd.to_datetime(combined["exercise.interval.startTime"], errors="coerce")
                     combined = combined.sort_values("_sort_time").drop(columns=["_sort_time"])
-                combined.to_csv(csv_path, index=False)
+                
+                try:
+                    combined.to_csv(csv_path, index=False)
+                except Exception as w_err:
+                    print(f"Auto-heal disk write warning: {w_err}")
+                
                 return combined
         return df_current
     except Exception as e:
         print(f"Auto-heal warning: {e}")
-        return None
+        return df_current

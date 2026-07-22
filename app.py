@@ -114,12 +114,11 @@ def index():
 
 
 def _load_runs_from_csv():
-    auto_heal_exercises(BASE_DIR)
-    if not os.path.exists(EXERCISES_CSV):
-        return []
-
-    # Load exercises and filter for RUNNING
-    df = pd.read_csv(EXERCISES_CSV)
+    df = auto_heal_exercises(BASE_DIR)
+    if df is None or df.empty:
+        if not os.path.exists(EXERCISES_CSV):
+            return []
+        df = pd.read_csv(EXERCISES_CSV)
     if df.empty:
         return []
 
