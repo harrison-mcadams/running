@@ -89,32 +89,64 @@ def get_recent_exercises(start_date="2025-12-01T00:00:00Z"):
 
 
 def save_exercises(new_df, csv_path="my_exercises.csv"):
-    """Merges newly fetched exercises with existing CSV to prevent loss of historical data."""
+    """Merges newly fetched exercises with existing CSV, strictly preserving all historical data."""
     if new_df is None or new_df.empty:
         if os.path.exists(csv_path):
             return pd.read_csv(csv_path)
         return new_df
 
-    if os.path.exists(csv_path):
-        try:
-            existing_df = pd.read_csv(csv_path)
-            combined_df = pd.concat([existing_df, new_df], ignore_index=True)
-            if "name" in combined_df.columns:
-                combined_df["_run_id"] = combined_df["name"].astype(str).apply(lambda x: x.split("/")[-1])
-                combined_df = combined_df.drop_duplicates(subset=["_run_id"], keep="last").drop(columns=["_run_id"])
-            if "exercise.interval.startTime" in combined_df.columns:
-                combined_df["_sort_time"] = pd.to_datetime(combined_df["exercise.interval.startTime"], format="ISO8601")
-                combined_df = combined_df.sort_values("_sort_time").drop(columns=["_sort_time"])
-            combined_df.to_csv(csv_path, index=False)
-            print(f"Successfully merged {len(new_df)} new data points with existing exercises. Total saved: {len(combined_df)}")
-            return combined_df
-        except Exception as e:
-            print(f"Error merging exercise data: {e}. Overwriting CSV fallback.")
-            new_df.to_csv(csv_path, index=False)
-            return new_df
-    else:
+    if not os.path.exists(csv_path):
         new_df.to_csv(csv_path, index=False)
         return new_df
+
+    try:
+        existing_df = pd.read_csv(csv_path)
+    except Exception as e:
+        print(f"Error reading existing CSV: {e}")
+        new_df.to_csv(csv_path, index=False)
+        return new_df
+
+    try:
+        # Extract unique run_id from name column
+        if "name" in existing_df.columns:
+            existing_df["_run_id"] = existing_df["name"].astype(str).apply(lambda x: x.split("/")[-1])
+        else:
+            existing_df["_run_id"] = [str(i) for i in range(len(existing_df))]
+
+        if "name" in new_df.columns:
+            new_df["_run_id"] = new_df["name"].astype(str).apply(lambda x: x.split("/")[-1])
+        else:
+            new_df["_run_id"] = [str(i) for i in range(len(new_df))]
+
+        existing_ids = set(existing_df["_run_id"].dropna())
+        truly_new_df = new_df[~new_df["_run_id"].isin(existing_ids)].copy()
+
+        print(f"Found {len(truly_new_df)} brand new exercise data points out of {len(new_df)} fetched.")
+
+        if truly_new_df.empty:
+            existing_df = existing_df.drop(columns=["_run_id"], errors="ignore")
+            existing_df.to_csv(csv_path, index=False)
+            return existing_df
+
+        combined_df = pd.concat([existing_df, truly_new_df], ignore_index=True)
+        combined_df = combined_df.drop(columns=["_run_id"], errors="ignore")
+        existing_df = existing_df.drop(columns=["_run_id"], errors="ignore")
+
+        if "exercise.interval.startTime" in combined_df.columns:
+            try:
+                combined_df["_sort_time"] = pd.to_datetime(combined_df["exercise.interval.startTime"], errors="coerce")
+                combined_df = combined_df.sort_values("_sort_time").drop(columns=["_sort_time"])
+            except Exception as st_err:
+                print(f"Warning sorting timestamps: {st_err}")
+
+        combined_df.to_csv(csv_path, index=False)
+        print(f"Successfully merged new items. Total exercises in CSV: {len(combined_df)}")
+        return combined_df
+
+    except Exception as e:
+        print(f"Error during exercise merge: {e}. Strictly preserving existing CSV.")
+        existing_df = existing_df.drop(columns=["_run_id"], errors="ignore")
+        return existing_df
 
 
 def download_run_heart_rates(df):
