@@ -291,6 +291,30 @@ def _load_runs_from_csv():
     return runs_list
 
 
+@app.route('/api/debug')
+def debug_info():
+    csv_path = os.path.join(BASE_DIR, 'my_exercises.csv')
+    all_csv_path = os.path.join(BASE_DIR, 'my_exercises_all.csv')
+
+    my_ex_exists = os.path.exists(csv_path)
+    my_ex_all_exists = os.path.exists(all_csv_path)
+
+    my_ex_len = len(pd.read_csv(csv_path)) if my_ex_exists else 0
+    my_ex_all_len = len(pd.read_csv(all_csv_path)) if my_ex_all_exists else 0
+
+    runs = _load_runs_from_csv()
+
+    return jsonify({
+        "my_exercises_exists": my_ex_exists,
+        "my_exercises_len": my_ex_len,
+        "my_exercises_all_exists": my_ex_all_exists,
+        "my_exercises_all_len": my_ex_all_len,
+        "loaded_runs_count": len(runs),
+        "loaded_runs_total_dist": round(sum(r['distance_mi'] for r in runs), 2),
+        "run_dates": [f"{r['date']} ({r['id']}): {r['distance_mi']} mi" for r in runs]
+    })
+
+
 @app.route('/api/sync', methods=['POST'])
 def sync_data():
     import subprocess
