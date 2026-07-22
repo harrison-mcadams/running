@@ -542,8 +542,10 @@
                         <i class="fa-brands fa-google"></i>
                         <span>Connect Google Account</span>
                     </button>
-                    <p style="font-size: 11px; color: var(--text-muted); margin: 0; line-height: 1.4;">
-                        Note: Make sure <code>http://localhost:8088/api/auth/google/callback</code> is in your Google Cloud Console "Authorized redirect URIs".
+                    <p style="font-size: 11px; color: var(--text-muted); margin: 0; line-height: 1.5;">
+                        Note: In Google Cloud Console <strong>Authorized redirect URIs</strong>, add both:<br>
+                        <code style="color: var(--color-primary);">http://puck-server.tailcfee0c.ts.net:8088/api/auth/google/callback</code><br>
+                        <code style="color: var(--color-primary);">http://localhost:8088/api/auth/google/callback</code>
                     </p>
                 </div>
 
