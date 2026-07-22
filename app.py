@@ -5,6 +5,7 @@ import xml.etree.ElementTree as ET
 from flask import Flask, jsonify, send_from_directory, request, redirect
 import pandas as pd
 import math
+from historical_runs import auto_heal_exercises
 
 app = Flask(__name__, static_folder='static', static_url_path='')
 
@@ -110,44 +111,6 @@ def parse_tcx_xml(xml_str):
 @app.route('/')
 def index():
     return send_from_directory(app.static_folder, 'index.html')
-
-
-def auto_heal_exercises(base_dir):
-    csv_path = os.path.join(base_dir, "my_exercises.csv")
-    all_csv_path = os.path.join(base_dir, "my_exercises_all.csv")
-
-    if not os.path.exists(csv_path) and os.path.exists(all_csv_path):
-        try:
-            df_all = pd.read_csv(all_csv_path)
-            df_all.to_csv(csv_path, index=False)
-            return df_all
-        except Exception:
-            pass
-
-    if not os.path.exists(csv_path):
-        return None
-
-    try:
-        df_current = pd.read_csv(csv_path)
-        if os.path.exists(all_csv_path):
-            df_all = pd.read_csv(all_csv_path)
-            if "name" in df_current.columns and "name" in df_all.columns:
-                current_ids = set(df_current["name"].astype(str).apply(lambda x: x.split("/")[-1]))
-                df_all["_run_id"] = df_all["name"].astype(str).apply(lambda x: x.split("/")[-1])
-                missing_df = df_all[~df_all["_run_id"].isin(current_ids)].copy()
-
-                if not missing_df.empty:
-                    print(f"Auto-heal: Merging {len(missing_df)} missing historical entries into my_exercises.csv...")
-                    combined = pd.concat([df_current, missing_df.drop(columns=["_run_id"])], ignore_index=True)
-                    if "exercise.interval.startTime" in combined.columns:
-                        combined["_sort_time"] = pd.to_datetime(combined["exercise.interval.startTime"], errors="coerce")
-                        combined = combined.sort_values("_sort_time").drop(columns=["_sort_time"])
-                    combined.to_csv(csv_path, index=False)
-                    return combined
-        return df_current
-    except Exception as e:
-        print(f"Auto-heal warning: {e}")
-        return None
 
 
 def _load_runs_from_csv():
