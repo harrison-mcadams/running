@@ -185,32 +185,48 @@ EMBEDDED_HISTORICAL_RUNS = [
 def auto_heal_exercises(base_dir):
     csv_path = os.path.join(base_dir, "my_exercises.csv")
     df_embedded = pd.DataFrame(EMBEDDED_HISTORICAL_RUNS)
+    df_embedded["_run_id"] = df_embedded["name"].astype(str).apply(lambda x: x.split("/")[-1])
 
     if not os.path.exists(csv_path):
         try:
-            df_embedded.to_csv(csv_path, index=False)
+            df_embedded.drop(columns=["_run_id"], errors="ignore").to_csv(csv_path, index=False)
         except Exception as e:
             print(f"Auto-heal write error: {e}")
-        return df_embedded
+        return df_embedded.drop(columns=["_run_id"], errors="ignore")
 
     try:
         df_current = pd.read_csv(csv_path)
     except Exception as e:
         print(f"Auto-heal read error: {e}")
-        return df_embedded
+        return df_embedded.drop(columns=["_run_id"], errors="ignore")
 
     try:
         if "name" in df_current.columns:
-            current_ids = set(df_current["name"].astype(str).apply(lambda x: x.split("/")[-1]))
-            df_embedded["_run_id"] = df_embedded["name"].astype(str).apply(lambda x: x.split("/")[-1])
-            missing_df = df_embedded[~df_embedded["_run_id"].isin(current_ids)].copy()
+            df_current["_run_id"] = df_current["name"].astype(str).apply(lambda x: x.split("/")[-1])
+            
+            # Find existing RUNNING IDs in df_current
+            if "exercise.exerciseType" in df_current.columns:
+                running_df = df_current[df_current["exercise.exerciseType"] == "RUNNING"]
+                current_running_ids = set(running_df["_run_id"].dropna())
+            else:
+                current_running_ids = set()
 
-            if not missing_df.empty:
-                print(f"Auto-heal: Merging {len(missing_df)} missing historical entries...")
-                combined = pd.concat([df_current, missing_df.drop(columns=["_run_id"])], ignore_index=True)
+            # Find missing embedded RUNNING entries
+            missing_runs = df_embedded[~df_embedded["_run_id"].isin(current_running_ids)].copy()
+
+            if not missing_runs.empty:
+                print(f"Auto-heal: Injecting {len(missing_runs)} missing historical RUNNING entries...")
+                
+                # Remove any existing rows with these IDs that were not marked as RUNNING
+                missing_ids = set(missing_runs["_run_id"])
+                cleaned_current = df_current[~df_current["_run_id"].isin(missing_ids)].copy()
+                
+                combined = pd.concat([cleaned_current, missing_runs], ignore_index=True)
                 if "exercise.interval.startTime" in combined.columns:
                     combined["_sort_time"] = pd.to_datetime(combined["exercise.interval.startTime"], errors="coerce")
                     combined = combined.sort_values("_sort_time").drop(columns=["_sort_time"])
+                
+                combined = combined.drop(columns=["_run_id"], errors="ignore")
                 
                 try:
                     combined.to_csv(csv_path, index=False)
@@ -218,7 +234,10 @@ def auto_heal_exercises(base_dir):
                     print(f"Auto-heal disk write warning: {w_err}")
                 
                 return combined
+                
+        df_current = df_current.drop(columns=["_run_id"], errors="ignore")
         return df_current
     except Exception as e:
         print(f"Auto-heal warning: {e}")
+        df_current = df_current.drop(columns=["_run_id"], errors="ignore") if "df_current" in locals() else df_embedded
         return df_current
