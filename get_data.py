@@ -46,19 +46,26 @@ def get_headers():
 BASE_URL = "https://health.googleapis.com/v4"
 
 
-def get_recent_exercises():
-    """Fetches a list of tracked exercises (runs, walks, etc.) paginating to get all history."""
+def get_recent_exercises(start_date="2025-12-01T00:00:00Z"):
+    """Fetches a list of tracked exercises (runs, walks, etc.) paginating to get all history from start_date onwards."""
     url = f"{BASE_URL}/users/me/dataTypes/exercise/dataPoints"
     all_points = []
     page_token = None
 
-    print("Fetching tracked exercises with pagination...")
+    print(f"Fetching tracked exercises with pagination (from {start_date})...")
     while True:
         params = {}
         if page_token:
             params["pageToken"] = page_token
+        elif start_date:
+            params["filter"] = f'exercise.interval.start_time >= "{start_date}"'
 
         response = requests.get(url, headers=headers, params=params)
+        # Fallback if filter expression is rejected by API
+        if response.status_code != 200 and "filter" in params:
+            del params["filter"]
+            response = requests.get(url, headers=headers, params=params)
+
         if response.status_code == 200:
             data = response.json()
             points = data.get("dataPoints", [])
