@@ -88,8 +88,49 @@ def get_recent_exercises(start_date="2025-12-01T00:00:00Z"):
     return df
 
 
+def auto_heal_exercises(base_dir):
+    csv_path = os.path.join(base_dir, "my_exercises.csv")
+    all_csv_path = os.path.join(base_dir, "my_exercises_all.csv")
+
+    if not os.path.exists(csv_path) and os.path.exists(all_csv_path):
+        try:
+            df_all = pd.read_csv(all_csv_path)
+            df_all.to_csv(csv_path, index=False)
+            return df_all
+        except Exception:
+            pass
+
+    if not os.path.exists(csv_path):
+        return None
+
+    try:
+        df_current = pd.read_csv(csv_path)
+        if os.path.exists(all_csv_path):
+            df_all = pd.read_csv(all_csv_path)
+            if "name" in df_current.columns and "name" in df_all.columns:
+                current_ids = set(df_current["name"].astype(str).apply(lambda x: x.split("/")[-1]))
+                df_all["_run_id"] = df_all["name"].astype(str).apply(lambda x: x.split("/")[-1])
+                missing_df = df_all[~df_all["_run_id"].isin(current_ids)].copy()
+
+                if not missing_df.empty:
+                    print(f"Auto-heal: Merging {len(missing_df)} missing historical entries into my_exercises.csv...")
+                    combined = pd.concat([df_current, missing_df.drop(columns=["_run_id"])], ignore_index=True)
+                    if "exercise.interval.startTime" in combined.columns:
+                        combined["_sort_time"] = pd.to_datetime(combined["exercise.interval.startTime"], errors="coerce")
+                        combined = combined.sort_values("_sort_time").drop(columns=["_sort_time"])
+                    combined.to_csv(csv_path, index=False)
+                    return combined
+        return df_current
+    except Exception as e:
+        print(f"Auto-heal warning: {e}")
+        return None
+
+
 def save_exercises(new_df, csv_path="my_exercises.csv"):
     """Merges newly fetched exercises with existing CSV, strictly preserving all historical data."""
+    base_dir = os.path.dirname(os.path.abspath(csv_path)) if os.path.isabs(csv_path) else os.path.dirname(os.path.abspath(__file__))
+    auto_heal_exercises(base_dir)
+
     if new_df is None or new_df.empty:
         if os.path.exists(csv_path):
             return pd.read_csv(csv_path)

@@ -5,6 +5,7 @@ credentials.json
 # Local Fitbit/Google Health Connect Data Caches
 *.csv
 !my_exercises.csv
+!my_exercises_all.csv
 run_heart_rates/
 run_routes/
 
