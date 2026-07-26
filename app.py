@@ -6,6 +6,8 @@ from flask import Flask, jsonify, send_from_directory, request, redirect
 import pandas as pd
 import math
 from historical_runs import auto_heal_exercises
+from weather_service import get_weather_for_runs
+from pace_model import model_instance
 
 app = Flask(__name__, static_folder='static', static_url_path='')
 
@@ -135,6 +137,13 @@ def _load_runs_from_csv():
     # Filter for runs from 2025-12-29 onwards (when the user got their watch)
     runs = runs[runs['startTime'] >= pd.to_datetime('2025-12-29', utc=True)]
 
+    # Fetch weather data cache for runs
+    runs_meta = [
+        {"id": r['name'].split('/')[-1], "datetime": r['exercise.interval.startTime']}
+        for _, r in runs.iterrows()
+    ]
+    weather_cache = get_weather_for_runs(runs_meta, ROUTES_DIR, BASE_DIR)
+
     runs_list = []
     for idx, row in runs.iterrows():
         run_id = row['name'].split('/')[-1]
@@ -220,6 +229,20 @@ def _load_runs_from_csv():
         # Metadata
         has_gps = bool(row.get('exercise.exerciseMetadata.hasGps', False))
 
+        weather_info = weather_cache.get(
+            run_id,
+            {
+                "temp_f": None,
+                "feels_like_f": None,
+                "humidity": None,
+                "weather_code": None,
+                "condition": "N/A",
+                "icon": "fa-cloud",
+                "wind_mph": None,
+                "location": "Philadelphia, PA",
+            },
+        )
+
         runs_list.append(
             {
                 "id": run_id,
@@ -248,6 +271,8 @@ def _load_runs_from_csv():
                     "vigorous_sec": vig,
                     "peak_sec": peak,
                 },
+                "temp_f": weather_info.get("temp_f"),
+                "weather": weather_info,
             }
         )
     return runs_list
@@ -290,6 +315,11 @@ def sync_data():
             check=True
         )
         print("Data sync script output:\n", result.stdout)
+        try:
+            model_instance.train()
+            print("Pace predictor retrained on new synced data.")
+        except Exception as te:
+            print("Model retrain error:", te)
         return jsonify({"success": True, "output": result.stdout})
     except subprocess.CalledProcessError as e:
         print("Data sync script failed. Error:\n", e.stderr)
@@ -443,6 +473,133 @@ def get_runs():
     except Exception as e:
         print(f"Error serving runs API: {e}")
         return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/predict-pace', methods=['POST'])
+def predict_pace_endpoint():
+    try:
+        data = request.get_json() or {}
+        distance_mi = float(data.get('distance_mi', 4.0))
+        temp_f = float(data.get('temp_f', 65.0))
+        humidity = float(data.get('humidity', 60.0))
+        time_str = str(data.get('time_str', '09:00'))
+        ran_yesterday = bool(data.get('ran_yesterday', False))
+        rest_days = float(data.get('rest_days', 2.0))
+        recent_7d_miles = float(data.get('recent_7d_miles', 10.0))
+        target_date_str = data.get('target_date_str')
+        model_type = data.get('model_type', 'hybrid')
+
+        result = model_instance.predict(
+            distance_mi=distance_mi,
+            temp_f=temp_f,
+            humidity=humidity,
+            time_str=time_str,
+            ran_yesterday=ran_yesterday,
+            rest_days=rest_days,
+            recent_7d_miles=recent_7d_miles,
+            target_date_str=target_date_str,
+            model_type=model_type
+        )
+        return jsonify(result)
+    except Exception as e:
+        print(f"Error in predict_pace_endpoint: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/parameter-sensitivity', methods=['POST'])
+def get_parameter_sensitivity_endpoint():
+    try:
+        data = request.get_json() or {}
+        distance_mi = float(data.get('distance_mi', 4.0))
+        temp_f = float(data.get('temp_f', 65.0))
+        humidity = float(data.get('humidity', 60.0))
+        time_str = str(data.get('time_str', '09:00'))
+        ran_yesterday = bool(data.get('ran_yesterday', False))
+        rest_days = float(data.get('rest_days', 2.0))
+        recent_7d_miles = float(data.get('recent_7d_miles', 10.0))
+        target_date_str = data.get('target_date_str')
+        model_type = str(data.get('model_type', 'hybrid'))
+
+        result = model_instance.get_parameter_sensitivity_curves(
+            distance_mi=distance_mi,
+            temp_f=temp_f,
+            humidity=humidity,
+            time_str=time_str,
+            ran_yesterday=ran_yesterday,
+            rest_days=rest_days,
+            recent_7d_miles=recent_7d_miles,
+            target_date_str=target_date_str,
+            model_type=model_type
+        )
+        return jsonify(result)
+    except Exception as e:
+        print(f"Error in get_parameter_sensitivity_endpoint: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/model-insights')
+def get_model_insights_endpoint():
+    try:
+        timeline = model_instance.get_improvement_timeline()
+        return jsonify(timeline)
+    except Exception as e:
+        print(f"Error in get_model_insights_endpoint: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/current-conditions')
+def get_current_conditions():
+    try:
+        import datetime
+        now = datetime.datetime.now()
+        date_str = now.strftime('%Y-%m-%d')
+        time_str = now.strftime('%H:%M')
+        
+        temp_f = 65.0
+        humidity = 60.0
+        try:
+            import requests
+            url = 'https://api.open-meteo.com/v1/forecast?latitude=39.9473&longitude=-75.1795&current=temperature_2m,relative_humidity_2m&temperature_unit=fahrenheit'
+            res = requests.get(url, timeout=3).json()
+            curr = res.get('current', {})
+            if 'temperature_2m' in curr:
+                temp_f = round(float(curr['temperature_2m']), 1)
+            if 'relative_humidity_2m' in curr:
+                humidity = round(float(curr['relative_humidity_2m']), 1)
+        except Exception as we:
+            print("Live weather fetch warning:", we)
+            
+        ran_yesterday = False
+        rest_days = 2.0
+        if model_instance.df is not None and not model_instance.df.empty:
+            last_run_dt = model_instance.df['local_dt'].max()
+            today_dt = pd.to_datetime(now)
+            days_diff = (today_dt - last_run_dt.tz_localize(None)).total_seconds() / (24 * 3600.0)
+            rest_days = max(1.0, round(float(days_diff), 1))
+            ran_yesterday = bool(days_diff <= 1.5)
+            
+        return jsonify({
+            'date': date_str,
+            'time': time_str,
+            'temp_f': temp_f,
+            'humidity': humidity,
+            'ran_yesterday': ran_yesterday,
+            'rest_days': rest_days
+        })
+    except Exception as e:
+        print(f"Error in current conditions API: {e}")
+        import datetime
+        now = datetime.datetime.now()
+        return jsonify({
+            'date': now.strftime('%Y-%m-%d'),
+            'time': now.strftime('%H:%M'),
+            'temp_f': 65.0,
+            'humidity': 60.0,
+            'ran_yesterday': False,
+            'rest_days': 2.0
+        })
+
+
 
 
 COORDINATE_CACHE = {}

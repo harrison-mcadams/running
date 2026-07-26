@@ -37,6 +37,10 @@
                     <i class="fa-solid fa-route"></i>
                     <span>Compare Similar Runs</span>
                 </a>
+                <a href="#" class="menu-item" id="menu-predictor">
+                    <i class="fa-solid fa-wand-magic-sparkles"></i>
+                    <span>Pace Predictor & Progress</span>
+                </a>
                 
                 <div class="menu-separator"></div>
                 
@@ -207,6 +211,7 @@
                                     <th data-sort="duration_sec" style="cursor: pointer;">Duration <i class="fa-solid fa-sort"></i></th>
                                     <th data-sort="pace_sec_mi" style="cursor: pointer;">Avg Pace <i class="fa-solid fa-sort"></i></th>
                                     <th data-sort="avg_hr" style="cursor: pointer;">Avg Heart Rate <i class="fa-solid fa-sort"></i></th>
+                                    <th data-sort="temp_f" style="cursor: pointer;">Weather <i class="fa-solid fa-sort"></i></th>
                                     <th data-sort="cadence" style="cursor: pointer;">Cadence <i class="fa-solid fa-sort"></i></th>
                                     <th data-sort="stride_cm" style="cursor: pointer;">Stride Length <i class="fa-solid fa-sort"></i></th>
                                     <th class="text-right">Actions</th>
@@ -214,7 +219,7 @@
                             </thead>
                             <tbody id="runs-table-body">
                                 <tr>
-                                    <td colspan="8" class="text-center">Loading training history data...</td>
+                                    <td colspan="9" class="text-center">Loading training history data...</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -395,6 +400,309 @@
                     </div>
                 </section>
             </div>
+
+            <!-- Pace Predictor & Improvement View -->
+            <div id="predictor-view" style="display: none;">
+                <header class="content-header">
+                    <div class="header-title-area">
+                        <h1>Pace Predictor & Improvement Model</h1>
+                        <p class="header-subtitle">Forecast your expected running pace based on distance, weather, time of day, and recent soreness, while tracking your true fitness gains over time.</p>
+                    </div>
+                </header>
+
+                <!-- Model Stats Banner -->
+                <div class="metrics-grid margin-top-24">
+                    <div class="metric-card glass">
+                        <div class="metric-icon-wrapper green">
+                            <i class="fa-solid fa-arrow-trend-up"></i>
+                        </div>
+                        <div class="metric-data">
+                            <span class="metric-label">Fitness Progress Gain</span>
+                            <h2 class="metric-value" id="pred-stat-gain">-- faster</h2>
+                        </div>
+                    </div>
+
+                    <div class="metric-card glass">
+                        <div class="metric-icon-wrapper blue">
+                            <i class="fa-solid fa-stopwatch"></i>
+                        </div>
+                        <div class="metric-data">
+                            <span class="metric-label">Monthly Improvement Slope</span>
+                            <h2 class="metric-value" id="pred-stat-monthly">-- /mo</h2>
+                        </div>
+                    </div>
+
+                    <div class="metric-card glass">
+                        <div class="metric-icon-wrapper purple">
+                            <i class="fa-solid fa-brain"></i>
+                        </div>
+                        <div class="metric-data">
+                            <span class="metric-label">Model Accuracy (R²)</span>
+                            <h2 class="metric-value" id="pred-stat-accuracy">--%</h2>
+                        </div>
+                    </div>
+
+                    <div class="metric-card glass">
+                        <div class="metric-icon-wrapper orange">
+                            <i class="fa-solid fa-temperature-half"></i>
+                        </div>
+                        <div class="metric-data">
+                            <span class="metric-label">Heat Sensitivity Index</span>
+                            <h2 class="metric-value" id="pred-stat-heat">+4.1s /°F >75°F</h2>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Interactive Predictor Grid -->
+                <div class="predictor-grid margin-top-24">
+                    <!-- Left: Input Controls Card -->
+                    <div class="predictor-card glass">
+                        <div class="card-title">
+                            <h2><i class="fa-solid fa-sliders"></i> Planned Run Parameters</h2>
+                            <span class="badge" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3);">Predictor Inputs</span>
+                        </div>
+
+                        <!-- Model Architecture Selector Pills -->
+                        <div class="model-toggle-group" style="margin-bottom: 16px;">
+                            <label class="form-label" style="font-size: 12px; color: var(--text-muted); font-family: var(--font-inter); display: block; margin-bottom: 6px;">
+                                <i class="fa-solid fa-brain text-purple"></i> Model Architecture
+                            </label>
+                            <div class="pill-selector" style="display: flex; gap: 8px; background: rgba(255,255,255,0.03); padding: 4px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.08);">
+                                <button type="button" class="model-pill active" data-model="hybrid" style="flex:1; padding: 6px 10px; font-size: 11px; font-weight: 600; border-radius: 8px; border: none; cursor: pointer; transition: all 0.2s; background: #38bdf8; color: #0f172a;">
+                                    Hybrid (Ensemble)
+                                </button>
+                                <button type="button" class="model-pill" data-model="glm" style="flex:1; padding: 6px 10px; font-size: 11px; font-weight: 600; border-radius: 8px; border: none; cursor: pointer; transition: all 0.2s; background: transparent; color: var(--text-muted);">
+                                    GLM (Linear)
+                                </button>
+                                <button type="button" class="model-pill" data-model="rf" style="flex:1; padding: 6px 10px; font-size: 11px; font-weight: 600; border-radius: 8px; border: none; cursor: pointer; transition: all 0.2s; background: transparent; color: var(--text-muted);">
+                                    Random Forest
+                                </button>
+                            </div>
+                        </div>
+
+                        <form id="predictor-form" class="predictor-form">
+                            <!-- Distance Input -->
+                            <div class="form-group">
+                                <div class="form-label-group">
+                                    <label for="input-distance"><i class="fa-solid fa-road text-blue"></i> Planned Distance (miles)</label>
+                                    <span class="input-val-badge" id="val-distance">4.0 mi</span>
+                                </div>
+                                <input type="range" id="input-distance" min="1.0" max="15.0" step="0.25" value="4.0" class="custom-range">
+                            </div>
+
+                            <!-- Weather Row (Temp & Humidity) -->
+                            <div class="form-row">
+                                <div class="form-group flex-1">
+                                    <div class="form-label-group">
+                                        <label for="input-temp"><i class="fa-solid fa-temperature-high text-orange"></i> Temperature (°F)</label>
+                                        <span class="input-val-badge" id="val-temp">65°F</span>
+                                    </div>
+                                    <input type="range" id="input-temp" min="30" max="100" step="1" value="65" class="custom-range">
+                                    <div class="heat-warning" id="heat-warning" style="display:none; font-size:11px; color:#f97316; margin-top:4px;">
+                                        <i class="fa-solid fa-fire"></i> Severe heat penalty (>80°F active)
+                                    </div>
+                                </div>
+
+                                <div class="form-group flex-1">
+                                    <div class="form-label-group">
+                                        <label for="input-humidity"><i class="fa-solid fa-droplet text-blue"></i> Humidity (%)</label>
+                                        <span class="input-val-badge" id="val-humidity">60%</span>
+                                    </div>
+                                    <input type="range" id="input-humidity" min="20" max="100" step="5" value="60" class="custom-range">
+                                </div>
+                            </div>
+
+                            <!-- Time of Day Row -->
+                            <div class="form-row">
+                                <div class="form-group flex-1">
+                                    <label for="input-time"><i class="fa-solid fa-clock text-purple"></i> Start Time of Day</label>
+                                    <input type="time" id="input-time" value="09:00" class="custom-input">
+                                </div>
+
+                                <div class="form-group flex-1">
+                                    <label for="input-date"><i class="fa-solid fa-calendar-day text-green"></i> Target Date</label>
+                                    <input type="date" id="input-date" class="custom-input">
+                                </div>
+                            </div>
+
+                            <!-- Fatigue & Soreness Toggles -->
+                            <div class="form-section-title"><i class="fa-solid fa-bolt text-yellow"></i> Fatigue & Muscle Soreness Factors</div>
+                            
+                            <div class="form-row align-center">
+                                <div class="form-group flex-1">
+                                    <label class="toggle-container">
+                                        <input type="checkbox" id="input-ran-yesterday">
+                                        <span class="toggle-slider"></span>
+                                        <span class="toggle-label">Ran Yesterday? <small style="color: var(--text-muted);">(Soreness Factor)</small></span>
+                                    </label>
+                                </div>
+
+                                <div class="form-group flex-1">
+                                    <label for="input-rest-days">Rest Days Before Run</label>
+                                    <select id="input-rest-days" class="custom-select">
+                                        <option value="1">1 Day Rest (Back-to-back)</option>
+                                        <option value="2" selected>2 Days Rest (Standard)</option>
+                                        <option value="3">3 Days Rest (Fresh Legs)</option>
+                                        <option value="5">5+ Days Rest</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+
+                    <!-- Right: Prediction Output Display Card -->
+                    <div class="predictor-card glass result-card-highlight">
+                        <div class="card-title">
+                            <h2><i class="fa-solid fa-bullseye"></i> Expected Pace Forecast</h2>
+                            <span class="badge badge-success">ML Model Output</span>
+                        </div>
+
+                        <div class="prediction-big-display">
+                            <div class="pace-big-value" id="pred-pace-main">8:42</div>
+                            <span class="pace-unit">min / mile</span>
+                            <div class="confidence-pill" id="pred-confidence-pill"><i class="fa-solid fa-shield-halved"></i> 95% Confidence Range: 8:24 - 9:00 /mi</div>
+                        </div>
+
+                        <!-- Factor Attribution Breakdown -->
+                        <div class="breakdown-title"><i class="fa-solid fa-layer-group"></i> Pace Factor Attribution Breakdown</div>
+                        
+                        <div class="factor-chips-grid">
+                            <div class="factor-chip">
+                                <span class="chip-label"><i class="fa-solid fa-road"></i> Distance Impact</span>
+                                <span class="chip-val neutral" id="chip-dist">0.0s /mi</span>
+                            </div>
+                            <div class="factor-chip">
+                                <span class="chip-label"><i class="fa-solid fa-temperature-high"></i> Heat & Temp Penalty</span>
+                                <span class="chip-val penalty" id="chip-temp">+0.0s /mi</span>
+                            </div>
+                            <div class="factor-chip">
+                                <span class="chip-label"><i class="fa-solid fa-droplet"></i> Humidity Penalty</span>
+                                <span class="chip-val penalty" id="chip-humidity">+0.0s /mi</span>
+                            </div>
+                            <div class="factor-chip">
+                                <span class="chip-label"><i class="fa-solid fa-clock"></i> Time of Day Effect</span>
+                                <span class="chip-val credit" id="chip-tod">-0.0s /mi</span>
+                            </div>
+                            <div class="factor-chip">
+                                <span class="chip-label"><i class="fa-solid fa-bolt"></i> Soreness & Fatigue</span>
+                                <span class="chip-val penalty" id="chip-soreness">+0.0s /mi</span>
+                            </div>
+                            <div class="factor-chip">
+                                <span class="chip-label"><i class="fa-solid fa-arrow-trend-up"></i> Fitness Gain Credit</span>
+                                <span class="chip-val credit" id="chip-fitness">-0.0s /mi</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Improvement Over Time Plot Section -->
+                <section class="predictor-chart-section glass margin-top-24">
+                    <div class="section-header">
+                        <div>
+                            <h2><i class="fa-solid fa-chart-line"></i> Am I Improving Over Time? (Weather & Fatigue Adjusted Pace)</h2>
+                            <p class="section-subtitle" style="font-size: 12px; color: var(--text-muted); margin-top: 4px; font-family: var(--font-inter);">
+                                Raw pace (in red) fluctuates due to hot summer weather and fatigue. Weather & Distance-Adjusted Pace (in green) isolates your true underlying fitness gains.
+                            </p>
+                        </div>
+                    </div>
+                    <div class="chart-container" style="height: 380px; position: relative; margin-top: 15px;">
+                        <canvas id="improvementChartCanvas"></canvas>
+                    </div>
+                </section>
+
+                <!-- Dynamic Parameter Sensitivity Visualizations (Full Response Surfaces) -->
+                <div class="predictor-grid margin-top-24">
+                    <!-- 1. Temperature Curve -->
+                    <div class="predictor-card glass">
+                        <div class="card-title">
+                            <h2><i class="fa-solid fa-temperature-arrow-up text-orange"></i> Temperature Response Surface</h2>
+                            <span class="badge" style="background: rgba(249, 115, 22, 0.15); color: #f97316; border: 1px solid rgba(249, 115, 22, 0.3);">Dynamic Heat Curve</span>
+                        </div>
+                        <p class="section-subtitle" style="font-size: 12px; color: var(--text-muted); font-family: var(--font-inter);">
+                            How predicted pace varies across 40°F–95°F at your current slider setup. (Glowing dot = current temp).
+                        </p>
+                        <div class="chart-container" style="height: 250px; position: relative; margin-top: 10px;">
+                            <canvas id="tempSensitivityChartCanvas"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- 2. Time of Day Curve -->
+                    <div class="predictor-card glass">
+                        <div class="card-title">
+                            <h2><i class="fa-solid fa-clock text-purple"></i> Diurnal Pacing Response</h2>
+                            <span class="badge" style="background: rgba(192, 132, 252, 0.15); color: #c084fc; border: 1px solid rgba(192, 132, 252, 0.3);">Time of Day</span>
+                        </div>
+                        <p class="section-subtitle" style="font-size: 12px; color: var(--text-muted); font-family: var(--font-inter);">
+                            Pace variation across 6 AM – 8 PM. (Glowing dot = current time of day).
+                        </p>
+                        <div class="chart-container" style="height: 250px; position: relative; margin-top: 10px;">
+                            <canvas id="todSensitivityChartCanvas"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- 3. Distance Curve -->
+                    <div class="predictor-card glass">
+                        <div class="card-title">
+                            <h2><i class="fa-solid fa-route text-blue"></i> Distance Response Curve</h2>
+                            <span class="badge" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3);">Pace vs Distance</span>
+                        </div>
+                        <p class="section-subtitle" style="font-size: 12px; color: var(--text-muted); font-family: var(--font-inter);">
+                            How expected pace scales from 1 to 12 miles. (Glowing dot = current planned distance).
+                        </p>
+                        <div class="chart-container" style="height: 250px; position: relative; margin-top: 10px;">
+                            <canvas id="distSensitivityChartCanvas"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- 4. Humidity Curve -->
+                    <div class="predictor-card glass">
+                        <div class="card-title">
+                            <h2><i class="fa-solid fa-droplet text-green"></i> Humidity Response Curve</h2>
+                            <span class="badge" style="background: rgba(52, 211, 153, 0.15); color: #34d399; border: 1px solid rgba(52, 211, 153, 0.3);">Moisture Impact</span>
+                        </div>
+                        <p class="section-subtitle" style="font-size: 12px; color: var(--text-muted); font-family: var(--font-inter);">
+                            Pace response from 20% to 100% relative humidity. (Glowing dot = current humidity).
+                        </p>
+                        <div class="chart-container" style="height: 250px; position: relative; margin-top: 10px;">
+                            <canvas id="humSensitivityChartCanvas"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Historical Run Adjustments Breakdown Table -->
+                <section class="history-section glass margin-top-24">
+                    <div class="section-header">
+                        <div>
+                            <h2><i class="fa-solid fa-list-check"></i> Historical Run Adjustments Breakdown</h2>
+                            <p class="section-subtitle" style="font-size: 12px; color: var(--text-muted); margin-top: 4px; font-family: var(--font-inter);">
+                                Itemized breakdown for every prior run showing raw logged pace, weather & fatigue handicaps, and resulting Weather-Adjusted Pace.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="table-wrapper" style="margin-top: 15px;">
+                        <table class="history-table" id="adjustments-table">
+                            <thead>
+                                <tr>
+                                    <th>Date & Time</th>
+                                    <th>Dist</th>
+                                    <th>Temp / Hum</th>
+                                    <th>Raw Pace</th>
+                                    <th>Heat & Hum Penalty</th>
+                                    <th>Time of Day Penalty</th>
+                                    <th>Soreness Penalty</th>
+                                    <th class="text-right">Adjusted Fitness Pace</th>
+                                </tr>
+                            </thead>
+                            <tbody id="adjustments-table-body">
+                                <tr>
+                                    <td colspan="8" class="text-center">Loading run adjustments breakdown...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+            </div>
         </main>
     </div>
 
@@ -465,6 +773,14 @@
                         <div class="m-card">
                             <span class="m-label">Stride</span>
                             <span class="m-val" id="modal-stride">-- cm</span>
+                        </div>
+                        <div class="m-card">
+                            <span class="m-label">Weather</span>
+                            <span class="m-val" id="modal-weather">--</span>
+                        </div>
+                        <div class="m-card">
+                            <span class="m-label">Location</span>
+                            <span class="m-val" id="modal-location">--</span>
                         </div>
                     </div>
                     

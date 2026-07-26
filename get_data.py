@@ -183,6 +183,10 @@ def download_run_heart_rates(df):
         if pd.isna(avg_hr) or avg_hr == 0:
             continue
 
+        if start_str >= end_str:
+            print(f"Skipping HR for zero-duration run {date_str}")
+            continue
+
         print(f"Fetching heart rate for run {date_str} ({start_str} to {end_str})...")
         all_points = []
         page_token = None
@@ -302,3 +306,15 @@ if __name__ == "__main__":
         print("\nFirst few heart rate data points:")
         print(hr_df.head(10))
         hr_df.to_csv(os.path.join(base_dir, "my_heart_rate_samples.csv"), index=False)
+
+    # 4. Fetch and cache weather data for all runs
+    from weather_service import get_weather_for_runs
+    if os.path.exists(csv_path):
+        all_df = pd.read_csv(csv_path)
+        if "exercise.exerciseType" in all_df.columns:
+            r_df = all_df[all_df["exercise.exerciseType"] == "RUNNING"]
+            r_meta = [
+                {"id": r["name"].split("/")[-1], "datetime": r["exercise.interval.startTime"]}
+                for _, r in r_df.iterrows()
+            ]
+            get_weather_for_runs(r_meta, os.path.join(base_dir, "run_routes"), base_dir)

@@ -18,6 +18,11 @@ let compareSortAsc = false;
 let globalPaceBounds = { min: 480, max: 630 };
 let listenersInitialized = false;
 let compareChart = null;
+let improvementChart = null;
+let tempSensitivityChart = null;
+let todSensitivityChart = null;
+let distSensitivityChart = null;
+let humSensitivityChart = null;
 let compareChartMetric = 'distance_mi';
 
 
@@ -552,7 +557,7 @@ function renderHistoryTable() {
 
     const runs = getFilteredRuns();
     if (runs.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="8" class="text-center">No runs match the selected filters.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="9" class="text-center">No runs match the selected filters.</td></tr>`;
         return;
     }
 
@@ -584,12 +589,21 @@ function renderHistoryTable() {
         const tr = document.createElement('tr');
         tr.addEventListener('click', () => openRunModal(run.id));
         
+        const weatherHtml = run.weather && run.weather.temp_f !== null ? `
+            <span title="${run.weather.condition} | Feels like ${run.weather.feels_like_f}°F | Humidity ${run.weather.humidity}% | Wind ${run.weather.wind_mph} mph in ${run.weather.location}">
+                <i class="fa-solid ${run.weather.icon}" style="color: #f59e0b; font-size: 12px; margin-right: 4px;"></i>
+                <strong>${run.weather.temp_f}°F</strong>
+                <span style="font-size: 11px; color: var(--text-muted); display: block;">${run.weather.location}</span>
+            </span>
+        ` : 'N/A';
+
         tr.innerHTML = `
             <td><strong>${run.date}</strong> <span class="modal-run-time">${run.time}</span></td>
             <td>${run.distance_mi.toFixed(2)} mi</td>
             <td>${run.duration_str}</td>
             <td><i class="fa-solid fa-gauge-high" style="color: var(--color-primary); font-size: 12px; margin-right: 4px;"></i> ${run.pace_str}</td>
             <td>${run.avg_hr ? `<i class="fa-solid fa-heartbeat" style="color: var(--color-red); font-size: 12px; margin-right: 4px;"></i> ${run.avg_hr} bpm` : 'N/A'}</td>
+            <td>${weatherHtml}</td>
             <td>${run.cadence ? `${run.cadence} spm` : 'N/A'}</td>
             <td>${run.stride_cm ? `${run.stride_cm} cm` : 'N/A'}</td>
             <td class="text-right">
@@ -1368,6 +1382,14 @@ async function openRunModal(runId) {
     document.getElementById('modal-cadence').textContent = run.cadence ? `${run.cadence} spm` : 'N/A';
     document.getElementById('modal-stride').textContent = run.stride_cm ? `${run.stride_cm} cm` : 'N/A';
 
+    if (run.weather && run.weather.temp_f !== null) {
+        document.getElementById('modal-weather').innerHTML = `<i class="fa-solid ${run.weather.icon}" style="color: #f59e0b; margin-right: 4px;"></i> ${run.weather.temp_f}°F (${run.weather.condition})`;
+        document.getElementById('modal-location').textContent = run.weather.location;
+    } else {
+        document.getElementById('modal-weather').textContent = 'N/A';
+        document.getElementById('modal-location').textContent = 'N/A';
+    }
+
     // Populate HR zones
     updateZoneStats(run.zones, run.duration_sec);
 
@@ -1709,34 +1731,40 @@ function initCompareView() {
     });
     
     setupViewSwitching();
+    initPredictor();
 }
 
 function setupViewSwitching() {
     const menuDashboard = document.getElementById('menu-dashboard');
     const menuCompare = document.getElementById('menu-compare');
+    const menuPredictor = document.getElementById('menu-predictor');
     
     const dashboardView = document.getElementById('dashboard-view');
     const compareView = document.getElementById('compare-view');
+    const predictorView = document.getElementById('predictor-view');
     
-    if (menuDashboard && menuCompare && dashboardView && compareView) {
-        menuDashboard.addEventListener('click', (e) => {
-            e.preventDefault();
-            menuDashboard.classList.add('active');
-            menuCompare.classList.remove('active');
-            dashboardView.style.display = 'block';
-            compareView.style.display = 'none';
-            renderMainChart();
-        });
+    const switchTab = (activeMenu) => {
+        [menuDashboard, menuCompare, menuPredictor].forEach(m => { if (m) m.classList.remove('active'); });
+        [dashboardView, compareView, predictorView].forEach(v => { if (v) v.style.display = 'none'; });
         
-        menuCompare.addEventListener('click', (e) => {
-            e.preventDefault();
-            menuCompare.classList.add('active');
-            menuDashboard.classList.remove('active');
-            dashboardView.style.display = 'none';
-            compareView.style.display = 'block';
+        if (activeMenu === 'dashboard') {
+            if (menuDashboard) menuDashboard.classList.add('active');
+            if (dashboardView) dashboardView.style.display = 'block';
+            renderMainChart();
+        } else if (activeMenu === 'compare') {
+            if (menuCompare) menuCompare.classList.add('active');
+            if (compareView) compareView.style.display = 'block';
             onCompareViewActive();
-        });
-    }
+        } else if (activeMenu === 'predictor') {
+            if (menuPredictor) menuPredictor.classList.add('active');
+            if (predictorView) predictorView.style.display = 'block';
+            onPredictorViewActive();
+        }
+    };
+    
+    if (menuDashboard) menuDashboard.addEventListener('click', (e) => { e.preventDefault(); switchTab('dashboard'); });
+    if (menuCompare) menuCompare.addEventListener('click', (e) => { e.preventDefault(); switchTab('compare'); });
+    if (menuPredictor) menuPredictor.addEventListener('click', (e) => { e.preventDefault(); switchTab('predictor'); });
 }
 
 function onCompareViewActive() {
@@ -2257,4 +2285,630 @@ function renderCompareChart() {
         }
     });
 }
+
+// ==========================================
+// PACE PREDICTOR & IMPROVEMENT MODEL MODULE
+// ==========================================
+let selectedModelType = 'hybrid';
+
+function initPredictor() {
+    const distInput = document.getElementById('input-distance');
+    const valDist = document.getElementById('val-distance');
+    
+    const tempInput = document.getElementById('input-temp');
+    const valTemp = document.getElementById('val-temp');
+    const heatWarning = document.getElementById('heat-warning');
+    
+    const humInput = document.getElementById('input-humidity');
+    const valHum = document.getElementById('val-humidity');
+    
+    const timeInput = document.getElementById('input-time');
+    const dateInput = document.getElementById('input-date');
+    const ranYesterdayInput = document.getElementById('input-ran-yesterday');
+    const restDaysInput = document.getElementById('input-rest-days');
+
+    // Model Selector Pills
+    document.querySelectorAll('.model-pill').forEach(pill => {
+        pill.addEventListener('click', (e) => {
+            document.querySelectorAll('.model-pill').forEach(p => {
+                p.classList.remove('active');
+                p.style.background = 'transparent';
+                p.style.color = 'var(--text-muted)';
+            });
+            e.currentTarget.classList.add('active');
+            e.currentTarget.style.background = '#38bdf8';
+            e.currentTarget.style.color = '#0f172a';
+            selectedModelType = e.currentTarget.getAttribute('data-model') || 'hybrid';
+            updatePacePrediction();
+        });
+    });
+
+    const applyCurrentConditions = async () => {
+        try {
+            const res = await fetch('/api/current-conditions');
+            const data = await res.json();
+            if (data) {
+                if (dateInput) dateInput.value = data.date || new Date().toISOString().split('T')[0];
+                if (timeInput) timeInput.value = data.time || '09:00';
+                if (tempInput && valTemp && data.temp_f) {
+                    tempInput.value = Math.round(data.temp_f);
+                    valTemp.textContent = `${Math.round(data.temp_f)}°F`;
+                    if (heatWarning) heatWarning.style.display = data.temp_f >= 80 ? 'block' : 'none';
+                }
+                if (humInput && valHum && data.humidity) {
+                    humInput.value = Math.round(data.humidity);
+                    valHum.textContent = `${Math.round(data.humidity)}%`;
+                }
+                if (ranYesterdayInput && data.ran_yesterday !== undefined) {
+                    ranYesterdayInput.checked = data.ran_yesterday;
+                }
+                if (restDaysInput && data.rest_days) {
+                    const nearestRest = Math.min(5, Math.max(1, Math.round(data.rest_days)));
+                    restDaysInput.value = nearestRest.toString();
+                }
+            }
+        } catch (e) {
+            console.error('Error fetching live conditions:', e);
+        }
+        updatePacePrediction();
+    };
+
+    if (distInput && valDist) {
+        distInput.addEventListener('input', (e) => {
+            valDist.textContent = `${parseFloat(e.target.value).toFixed(2)} mi`;
+            updatePacePrediction();
+        });
+    }
+
+    if (tempInput && valTemp) {
+        tempInput.addEventListener('input', (e) => {
+            const tempVal = parseInt(e.target.value);
+            valTemp.textContent = `${tempVal}°F`;
+            if (heatWarning) {
+                heatWarning.style.display = tempVal >= 80 ? 'block' : 'none';
+            }
+            updatePacePrediction();
+        });
+    }
+
+    if (humInput && valHum) {
+        humInput.addEventListener('input', (e) => {
+            valHum.textContent = `${e.target.value}%`;
+            updatePacePrediction();
+        });
+    }
+
+    [timeInput, dateInput, ranYesterdayInput, restDaysInput].forEach(el => {
+        if (el) {
+            el.addEventListener('change', updatePacePrediction);
+        }
+    });
+
+    applyCurrentConditions();
+}
+
+async function onPredictorViewActive() {
+    initPredictor();
+    await loadImprovementTimeline();
+}
+
+async function updatePacePrediction() {
+    const dist = parseFloat(document.getElementById('input-distance')?.value || 4.0);
+    const temp = parseFloat(document.getElementById('input-temp')?.value || 65);
+    const hum = parseFloat(document.getElementById('input-humidity')?.value || 60);
+    const timeStr = document.getElementById('input-time')?.value || '09:00';
+    const dateStr = document.getElementById('input-date')?.value || null;
+    const ranYesterday = document.getElementById('input-ran-yesterday')?.checked || false;
+    const restDays = parseFloat(document.getElementById('input-rest-days')?.value || 2.0);
+
+    try {
+        const res = await fetch('/api/predict-pace', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                distance_mi: dist,
+                temp_f: temp,
+                humidity: hum,
+                time_str: timeStr,
+                ran_yesterday: ranYesterday,
+                rest_days: restDays,
+                recent_7d_miles: 10.0,
+                target_date_str: dateStr,
+                model_type: selectedModelType
+            })
+        });
+
+        const data = await res.json();
+        if (data.error) return;
+
+        const mainEl = document.getElementById('pred-pace-main');
+        const pillEl = document.getElementById('pred-confidence-pill');
+        if (mainEl) mainEl.textContent = data.predicted_pace_str;
+        if (pillEl) pillEl.innerHTML = `<i class="fa-solid fa-shield-halved"></i> 95% Confidence Range: ${data.confidence_range} /mi`;
+
+        const bd = data.breakdown || {};
+        
+        const formatChip = (id, secVal) => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            const absVal = Math.abs(secVal).toFixed(1);
+            if (secVal > 0.1) {
+                el.textContent = `+${absVal}s /mi`;
+                el.className = 'chip-val penalty';
+            } else if (secVal < -0.1) {
+                el.textContent = `-${absVal}s /mi`;
+                el.className = 'chip-val credit';
+            } else {
+                el.textContent = `0.0s /mi`;
+                el.className = 'chip-val neutral';
+            }
+        };
+
+        formatChip('chip-dist', bd.distance_impact_sec);
+        formatChip('chip-temp', bd.temp_impact_sec);
+        formatChip('chip-humidity', bd.humidity_impact_sec);
+        formatChip('chip-tod', bd.time_impact_sec);
+        formatChip('chip-soreness', bd.soreness_impact_sec);
+        formatChip('chip-fitness', bd.fitness_credit_sec);
+
+        // Fetch and render dynamic parameter sensitivity curves for full 1D response surfaces
+        try {
+            const sensRes = await fetch('/api/parameter-sensitivity', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    distance_mi: dist,
+                    temp_f: temp,
+                    humidity: hum,
+                    time_str: timeStr,
+                    ran_yesterday: ranYesterday,
+                    rest_days: restDays,
+                    recent_7d_miles: 10.0,
+                    target_date_str: dateStr,
+                    model_type: selectedModelType
+                })
+            });
+            const sensData = await sensRes.json();
+            if (sensData) {
+                renderTempSensitivityChart(sensData.temp_curve, temp);
+                renderTodSensitivityChart(sensData.tod_curve, timeStr);
+                renderDistSensitivityChart(sensData.dist_curve, dist);
+                renderHumSensitivityChart(sensData.hum_curve, hum);
+            }
+        } catch (se) {
+            console.error('Error fetching parameter sensitivity curves:', se);
+        }
+    } catch (e) {
+        console.error('Error updating pace prediction:', e);
+    }
+}
+
+async function loadImprovementTimeline() {
+    try {
+        const res = await fetch('/api/model-insights');
+        const data = await res.json();
+        if (!data || !data.summary) return;
+
+        const gainEl = document.getElementById('pred-stat-gain');
+        const monthlyEl = document.getElementById('pred-stat-monthly');
+        const accuracyEl = document.getElementById('pred-stat-accuracy');
+        const heatEl = document.getElementById('pred-stat-heat');
+
+        if (gainEl) gainEl.textContent = data.summary.total_improvement_str;
+        if (monthlyEl) monthlyEl.textContent = `${Math.abs(data.summary.improvement_rate_sec_per_month).toFixed(1)}s /mo`;
+        if (accuracyEl) accuracyEl.textContent = `${(data.metrics.r2_rf_model * 100).toFixed(1)}%`;
+        if (heatEl) heatEl.textContent = `+4.1s /°F >75°F`;
+
+        renderImprovementChart(data.runs);
+        renderAdjustmentsTable(data.runs);
+        if (data.parameter_curves) {
+            renderTempSensitivityChart(data.parameter_curves.temp_curve);
+            renderTodSensitivityChart(data.parameter_curves.tod_curve);
+        }
+    } catch (e) {
+        console.error('Error loading improvement timeline:', e);
+    }
+}
+
+function renderImprovementChart(runs) {
+    if (!runs || runs.length === 0) return;
+    const canvas = document.getElementById('improvementChartCanvas');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+
+    if (improvementChart) {
+        improvementChart.destroy();
+        improvementChart = null;
+    }
+
+    const parseDateMs = (dStr) => new Date(dStr.includes('T') ? dStr : dStr + 'T12:00:00').getTime();
+
+    const actualData = runs.map(r => ({ x: parseDateMs(r.date), y: r.actual_pace_sec, raw: r }));
+    const adjustedData = runs.map(r => ({ x: parseDateMs(r.date), y: r.adjusted_pace_sec, raw: r }));
+    const rollingData = runs.map(r => ({ x: parseDateMs(r.date), y: r.rolling_fitness_sec, raw: r }));
+    const trendData = runs.map(r => ({ x: parseDateMs(r.date), y: r.trend_pace_sec, raw: r }));
+
+    improvementChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            datasets: [
+                {
+                    label: 'Actual Logged Pace (Raw)',
+                    data: actualData,
+                    borderColor: 'rgba(249, 115, 22, 0.4)',
+                    backgroundColor: 'transparent',
+                    borderWidth: 1.5,
+                    borderDash: [3, 3],
+                    pointRadius: 4,
+                    pointBackgroundColor: '#f97316',
+                    pointHoverRadius: 6,
+                    tension: 0.15
+                },
+                {
+                    label: 'Adjusted Run Data Points',
+                    data: adjustedData,
+                    borderColor: 'rgba(167, 243, 208, 0.3)',
+                    backgroundColor: 'transparent',
+                    borderWidth: 0,
+                    pointRadius: 4,
+                    pointBackgroundColor: '#a7f3d0',
+                    pointHoverRadius: 6
+                },
+                {
+                    label: 'Smooth Rolling Fitness Curve (Non-Linear)',
+                    data: rollingData,
+                    borderColor: '#34d399',
+                    backgroundColor: 'rgba(52, 211, 153, 0.12)',
+                    borderWidth: 3,
+                    pointRadius: 0,
+                    fill: true,
+                    tension: 0.3
+                },
+                {
+                    label: 'Linear Macro Trend Line',
+                    data: trendData,
+                    borderColor: '#38bdf8',
+                    borderWidth: 2,
+                    borderDash: [6, 6],
+                    pointRadius: 0,
+                    fill: false
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    labels: { color: '#94a3b8', font: { family: 'Inter' } }
+                },
+                tooltip: {
+                    callbacks: {
+                        title: function(context) {
+                            const dp = context[0].raw;
+                            return `${dp.raw.date} — ${dp.raw.distance_mi.toFixed(2)} mi (${dp.raw.temp_f}°F)`;
+                        },
+                        label: function(context) {
+                            const dp = context.raw;
+                            const label = context.dataset.label;
+                            return `${label}: ${formatPace(dp.y)} /mi`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    type: 'linear',
+                    grid: { color: 'rgba(255,255,255,0.03)' },
+                    ticks: {
+                        color: '#94a3b8',
+                        callback: function(val) {
+                            return new Date(val).toLocaleDateString('en-US', {
+                                month: 'short',
+                                day: 'numeric'
+                            });
+                        }
+                    },
+                    title: {
+                        display: true,
+                        text: 'Run Date',
+                        color: '#94a3b8'
+                    }
+                },
+                y: {
+                    type: 'linear',
+                    reverse: true,
+                    grid: { color: 'rgba(255,255,255,0.05)' },
+                    ticks: {
+                        color: '#94a3b8',
+                        callback: function(val) { return formatPace(val); }
+                    },
+                    title: {
+                        display: true,
+                        text: 'Pace (min/mi)',
+                        color: '#94a3b8'
+                    }
+                }
+            }
+        }
+    });
+}
+
+// Render Historical Run Adjustments Breakdown Table
+function renderAdjustmentsTable(runs) {
+    const tbody = document.getElementById('adjustments-table-body');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+
+    if (!runs || runs.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" class="text-center">No run adjustments data available.</td></tr>';
+        return;
+    }
+
+    const sorted = [...runs].sort((a, b) => new Date(b.date + ' ' + (b.time||'00:00')) - new Date(a.date + ' ' + (a.time||'00:00')));
+
+    sorted.forEach(r => {
+        const tr = document.createElement('tr');
+        const adj = r.adjustments || {};
+
+        const formatPenalty = (sec) => {
+            if (sec > 0.1) return `<span class="text-orange" style="font-weight:600;">+${sec.toFixed(1)}s</span>`;
+            if (sec < -0.1) return `<span class="text-green" style="font-weight:600;">-${Math.abs(sec).toFixed(1)}s</span>`;
+            return `<span style="color:var(--text-muted);">0.0s</span>`;
+        };
+
+        const heatHumPen = (adj.temp_impact_sec || 0) + (adj.humidity_impact_sec || 0);
+
+        tr.innerHTML = `
+            <td>
+                <div style="font-weight:600; color:var(--text-main);">${r.date}</div>
+                <div style="font-size:11px; color:var(--text-muted);">${r.time || ''}</div>
+            </td>
+            <td>${r.distance_mi.toFixed(2)} mi</td>
+            <td>${r.temp_f}°F <small style="color:var(--text-muted);">(${r.humidity}%)</small></td>
+            <td><strong style="color:var(--text-main);">${r.actual_pace_str}</strong> /mi</td>
+            <td>${formatPenalty(heatHumPen)}</td>
+            <td>${formatPenalty(adj.tod_impact_sec || 0)}</td>
+            <td>${formatPenalty(adj.soreness_impact_sec || 0)}</td>
+            <td class="text-right">
+                <span class="badge badge-success" style="font-family:var(--font-inter); font-weight:700; font-size:13px; padding:4px 10px;">
+                    ${r.adjusted_pace_str} /mi
+                </span>
+            </td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
+
+// 1. Render Temperature Sensitivity Chart
+function renderTempSensitivityChart(tempCurve, currentTemp) {
+    if (!tempCurve || tempCurve.length === 0) return;
+    const canvas = document.getElementById('tempSensitivityChartCanvas');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+
+    if (tempSensitivityChart) {
+        tempSensitivityChart.destroy();
+        tempSensitivityChart = null;
+    }
+
+    const labels = tempCurve.map(c => `${c.temp_f}°F`);
+    const dataVals = tempCurve.map(c => c.predicted_pace_sec);
+    
+    // Highlight closest point to active currentTemp
+    const radii = tempCurve.map(c => Math.abs(c.temp_f - (currentTemp||65)) < 3 ? 7 : 3);
+    const bgColors = tempCurve.map(c => Math.abs(c.temp_f - (currentTemp||65)) < 3 ? '#ffffff' : '#f97316');
+    const borderWidths = tempCurve.map(c => Math.abs(c.temp_f - (currentTemp||65)) < 3 ? 3 : 1);
+
+    tempSensitivityChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Predicted Pace vs Temp',
+                data: dataVals,
+                borderColor: '#f97316',
+                backgroundColor: 'rgba(249, 115, 22, 0.12)',
+                borderWidth: 3,
+                pointRadius: radii,
+                pointBackgroundColor: bgColors,
+                pointBorderColor: '#f97316',
+                pointBorderWidth: borderWidths,
+                fill: true,
+                tension: 0.25
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        title: (ctx) => `Temp: ${tempCurve[ctx[0].dataIndex].temp_f}°F`,
+                        label: (ctx) => `Predicted Pace: ${formatPace(ctx.raw)} /mi`
+                    }
+                }
+            },
+            scales: {
+                x: { grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#94a3b8' } },
+                y: { type: 'linear', reverse: true, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#94a3b8', callback: val => formatPace(val) } }
+            }
+        }
+    });
+}
+
+// 2. Render Time of Day Sensitivity Chart
+function renderTodSensitivityChart(todCurve, currentTimeStr) {
+    if (!todCurve || todCurve.length === 0) return;
+    const canvas = document.getElementById('todSensitivityChartCanvas');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+
+    if (todSensitivityChart) {
+        todSensitivityChart.destroy();
+        todSensitivityChart = null;
+    }
+
+    const curHour = currentTimeStr ? parseFloat(currentTimeStr.split(':')[0]) : 9;
+    const labels = todCurve.map(c => c.hour_label);
+    const dataVals = todCurve.map(c => c.predicted_pace_sec);
+
+    const radii = todCurve.map(c => Math.abs(c.hour - curHour) < 1 ? 7 : 3);
+    const bgColors = todCurve.map(c => Math.abs(c.hour - curHour) < 1 ? '#ffffff' : '#c084fc');
+    const borderWidths = todCurve.map(c => Math.abs(c.hour - curHour) < 1 ? 3 : 1);
+
+    todSensitivityChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Predicted Pace vs Time of Day',
+                data: dataVals,
+                borderColor: '#c084fc',
+                backgroundColor: 'rgba(192, 132, 252, 0.12)',
+                borderWidth: 3,
+                pointRadius: radii,
+                pointBackgroundColor: bgColors,
+                pointBorderColor: '#c084fc',
+                pointBorderWidth: borderWidths,
+                fill: true,
+                tension: 0.25
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        title: (ctx) => `Time: ${todCurve[ctx[0].dataIndex].hour_label}`,
+                        label: (ctx) => `Predicted Pace: ${formatPace(ctx.raw)} /mi`
+                    }
+                }
+            },
+            scales: {
+                x: { grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#94a3b8' } },
+                y: { type: 'linear', reverse: true, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#94a3b8', callback: val => formatPace(val) } }
+            }
+        }
+    });
+}
+
+// 3. Render Distance Sensitivity Chart
+function renderDistSensitivityChart(distCurve, currentDist) {
+    if (!distCurve || distCurve.length === 0) return;
+    const canvas = document.getElementById('distSensitivityChartCanvas');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+
+    if (distSensitivityChart) {
+        distSensitivityChart.destroy();
+        distSensitivityChart = null;
+    }
+
+    const labels = distCurve.map(c => `${c.distance_mi} mi`);
+    const dataVals = distCurve.map(c => c.predicted_pace_sec);
+
+    const radii = distCurve.map(c => Math.abs(c.distance_mi - (currentDist||4.0)) < 0.6 ? 7 : 3);
+    const bgColors = distCurve.map(c => Math.abs(c.distance_mi - (currentDist||4.0)) < 0.6 ? '#ffffff' : '#38bdf8');
+    const borderWidths = distCurve.map(c => Math.abs(c.distance_mi - (currentDist||4.0)) < 0.6 ? 3 : 1);
+
+    distSensitivityChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Predicted Pace vs Distance',
+                data: dataVals,
+                borderColor: '#38bdf8',
+                backgroundColor: 'rgba(56, 189, 248, 0.12)',
+                borderWidth: 3,
+                pointRadius: radii,
+                pointBackgroundColor: bgColors,
+                pointBorderColor: '#38bdf8',
+                pointBorderWidth: borderWidths,
+                fill: true,
+                tension: 0.25
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        title: (ctx) => `Distance: ${distCurve[ctx[0].dataIndex].distance_mi} mi`,
+                        label: (ctx) => `Predicted Pace: ${formatPace(ctx.raw)} /mi`
+                    }
+                }
+            },
+            scales: {
+                x: { grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#94a3b8' } },
+                y: { type: 'linear', reverse: true, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#94a3b8', callback: val => formatPace(val) } }
+            }
+        }
+    });
+}
+
+// 4. Render Humidity Sensitivity Chart
+function renderHumSensitivityChart(humCurve, currentHum) {
+    if (!humCurve || humCurve.length === 0) return;
+    const canvas = document.getElementById('humSensitivityChartCanvas');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+
+    if (humSensitivityChart) {
+        humSensitivityChart.destroy();
+        humSensitivityChart = null;
+    }
+
+    const labels = humCurve.map(c => `${c.humidity}%`);
+    const dataVals = humCurve.map(c => c.predicted_pace_sec);
+
+    const radii = humCurve.map(c => Math.abs(c.humidity - (currentHum||60)) < 6 ? 7 : 3);
+    const bgColors = humCurve.map(c => Math.abs(c.humidity - (currentHum||60)) < 6 ? '#ffffff' : '#34d399');
+    const borderWidths = humCurve.map(c => Math.abs(c.humidity - (currentHum||60)) < 6 ? 3 : 1);
+
+    humSensitivityChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Predicted Pace vs Humidity',
+                data: dataVals,
+                borderColor: '#34d399',
+                backgroundColor: 'rgba(52, 211, 153, 0.12)',
+                borderWidth: 3,
+                pointRadius: radii,
+                pointBackgroundColor: bgColors,
+                pointBorderColor: '#34d399',
+                pointBorderWidth: borderWidths,
+                fill: true,
+                tension: 0.25
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        title: (ctx) => `Humidity: ${humCurve[ctx[0].dataIndex].humidity}%`,
+                        label: (ctx) => `Predicted Pace: ${formatPace(ctx.raw)} /mi`
+                    }
+                }
+            },
+            scales: {
+                x: { grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#94a3b8' } },
+                y: { type: 'linear', reverse: true, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#94a3b8', callback: val => formatPace(val) } }
+            }
+        }
+    });
+}
+
+
 
