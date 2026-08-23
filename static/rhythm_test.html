@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pixel Watch Cadence & Spotify Laboratory</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/rhythm_test.css">
+  <style>
+    .spotify-accent { color: #1DB954 !important; }
+    .spotify-card {
+      background: linear-gradient(135deg, rgba(29, 185, 84, 0.12) 0%, rgba(18, 26, 42, 0.85) 100%);
+      border: 1px solid rgba(29, 185, 84, 0.3);
+    }
+    .spotify-album-frame {
+      width: 72px;
+      height: 72px;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      flex-shrink: 0;
+    }
+    .spotify-album-frame img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .spotify-btn {
+      background: #1DB954 !important;
+      color: #000 !important;
+      font-weight: 700 !important;
+    }
+    .spotify-btn:hover { background: #1ed760 !important; }
+    .spotify-demo-btn {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--panel-border);
+      color: var(--text-main);
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 0.8rem;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      text-align: left;
+    }
+    .spotify-demo-btn.active {
+      background: rgba(29, 185, 84, 0.2);
+      border-color: #1DB954;
+      color: #1DB954;
+    }
+    /* Live Coach Banner */
+    .coach-card {
+      background: rgba(0, 255, 136, 0.08);
+      border: 2px solid #00ff88;
+      border-radius: 16px;
+      padding: 16px;
+      text-align: center;
+      margin-bottom: 20px;
+      box-shadow: 0 0 25px rgba(0, 255, 136, 0.15);
+      transition: border-color 0.3s ease, background 0.3s ease;
+    }
+    .coach-text {
+      font-size: 1.25rem;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      color: #fff;
+    }
+    /* Calibration Diagnostic Boxes */
+    .diag-box {
+      background: rgba(0, 242, 254, 0.05);
+      border: 1px solid rgba(0, 242, 254, 0.2);
+      border-radius: 10px;
+      padding: 12px;
+      text-align: center;
+    }
+    .diag-val {
+      font-size: 1.4rem;
+      font-weight: 700;
+      color: #00f2fe;
+    }
+    .diag-lbl {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+    }
+    select.axis-select {
+      width: 100%;
+      padding: 10px;
+      border-radius: 8px;
+      background: rgba(0, 0, 0, 0.5);
+      border: 1px solid var(--panel-border);
+      color: #fff;
+      font-size: 0.85rem;
+      font-weight: 600;
+      outline: none;
+    }
+    /* Live Watch Beat Flash Card */
+    .watch-beat-card {
+      background: rgba(255, 0, 127, 0.08);
+      border: 2px solid #ff007f;
+      border-radius: 16px;
+      padding: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+      box-shadow: 0 0 20px rgba(255, 0, 127, 0.15);
+      transition: all 0.1s ease;
+    }
+    .watch-beat-card.flash {
+      background: rgba(255, 0, 127, 0.35);
+      border-color: #fff;
+      box-shadow: 0 0 35px #ff007f;
+      transform: scale(1.01);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>
+        <span class="spotify-accent">🚲 Cockpit Readout</span> & Beat Sync
+        <span class="badge" style="border-color: rgba(0, 255, 136, 0.4); color: #00ff88;">Watch Real-Time Readout</span>
+      </h1>
+      <a href="/" class="btn btn-secondary" style="width: auto; padding: 8px 16px; font-size: 0.85rem;">← Back to App</a>
+    </header>
+
+    <div class="dashboard-grid">
+      <!-- Main Visualizer Panel -->
+      <main>
+        <!-- LIVE RHYTHM COACH BANNER -->
+        <div id="coach-card" class="coach-card">
+          <div id="coach-text" class="coach-text">🎯 YOU ARE IN TIME WITH THE MUSIC!</div>
+          <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;">
+            Live Visual & Spoken Feedback
+          </div>
+        </div>
+
+        <!-- DEDICATED WATCH REAL-TIME BEAT TRACKER HUD BANNER -->
+        <div id="watch-beat-banner" class="watch-beat-card">
+          <div style="display: flex; align-items: center; gap: 14px;">
+            <div id="pulse-motion-large" class="pulse-indicator" style="width: 36px; height: 36px; background: #ff007f; box-shadow: 0 0 20px #ff007f;"></div>
+            <div>
+              <div style="font-size: 0.75rem; font-weight: 700; color: #ff007f; letter-spacing: 1px;">LIVE WATCH BEAT DETECTOR</div>
+              <div id="watch-beat-text" style="font-size: 1.3rem; font-weight: 800; color: #fff;">⌚ DETECTED CADENCE: <span id="watch-live-rpm" style="color: #00f2fe;">140.0</span> RPM</div>
+            </div>
+          </div>
+          <div style="text-align: right;">
+            <div style="font-size: 0.75rem; color: var(--text-muted);">STROKE INTERVAL</div>
+            <div id="watch-live-interval" style="font-size: 1.3rem; font-weight: 700; color: #ffb700;">428 ms</div>
+          </div>
+        </div>
+
+        <!-- GIANT HANDLEBAR COCKPIT READOUT DISPLAY -->
+        <div class="hud-cockpit-card">
+          <div class="cockpit-title-bar">
+            <span>🚲 HANDLEBAR REAL-TIME COCKPIT READOUT</span>
+            <button id="btn-fullscreen" class="btn btn-secondary" style="width: auto; padding: 4px 12px; font-size: 0.75rem;">
+              ⛶ Fullscreen Cockpit
+            </button>
+          </div>
+
+          <div class="cockpit-main-readout">
+            <div class="cockpit-metric-main">
+              <div class="cockpit-giant-num" id="cockpit-sync-num">0%</div>
+              <div class="cockpit-label">BEAT MATCH SYNC</div>
+            </div>
+
+            <div class="cockpit-divider"></div>
+
+            <div class="cockpit-metric-secondary">
+              <div class="cockpit-num" id="cockpit-cadence-num" style="color: #00f2fe;">0</div>
+              <div class="cockpit-label">WATCH CADENCE (RPM)</div>
+
+              <div class="cockpit-num" id="cockpit-bpm-num" style="color: #ffb700; margin-top: 12px;">140</div>
+              <div class="cockpit-label">MUSIC BPM</div>
+            </div>
+
+            <div class="cockpit-divider"></div>
+
+            <div class="cockpit-metric-secondary">
+              <div class="cockpit-num" id="cockpit-offset-num" style="color: #ff007f;">+0 ms</div>
+              <div class="cockpit-label">TIMING OFFSET</div>
+
+              <div class="cockpit-num" id="cockpit-phase-num" style="color: #00ff88; margin-top: 12px;">0%</div>
+              <div class="cockpit-label">PHASE LOCK (R)</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- LIVE PEAK DETECTOR DIAGNOSTIC READOUTS -->
+        <div class="glass-card">
+          <div class="card-title">
+            <span>📊 Live Peak Calibration Readouts</span>
+            <span style="font-size: 0.8rem; font-weight: normal; color: #ff007f;">Pink Dots = Visual Peak Markers</span>
+          </div>
+
+          <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;">
+            <div class="diag-box">
+              <div class="diag-lbl">Peak Amplitude</div>
+              <div class="diag-val" id="diag-amp" style="color: #00f2fe;">0.00 m/s²</div>
+            </div>
+
+            <div class="diag-box">
+              <div class="diag-lbl">Dynamic Threshold</div>
+              <div class="diag-val" id="diag-thresh" style="color: #ffb700;">0.20 m/s²</div>
+            </div>
+
+            <div class="diag-box">
+              <div class="diag-lbl">Stroke Interval</div>
+              <div class="diag-val" id="diag-interval" style="color: #ff007f;">0 ms</div>
+            </div>
+
+            <div class="diag-box">
+              <div class="diag-lbl">Total Strokes</div>
+              <div class="diag-val" id="diag-strokes" style="color: #00ff88;">0</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Oscilloscope Waveform Panel -->
+        <div class="glass-card">
+          <div class="card-title">
+            <span>📡 Real-time Watch Motion Oscilloscope</span>
+            <span style="font-size: 0.8rem; font-weight: normal; color: var(--primary-accent);">Earth-Aligned Up/Down Axis</span>
+          </div>
+
+          <div class="canvas-container">
+            <canvas id="oscilloscope"></canvas>
+          </div>
+
+          <!-- Beat Pulse Indicator -->
+          <div class="beat-pulse-bar">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <div id="pulse-beat" class="pulse-indicator"></div>
+              <span style="font-size: 0.85rem; color: var(--text-muted);">Spotify Beat Tick</span>
+            </div>
+
+            <div style="display: flex; align-items: center; gap: 8px; margin-left: 24px;">
+              <div id="pulse-motion" class="pulse-indicator"></div>
+              <span style="font-size: 0.85rem; color: var(--text-muted);">Watch Motion Peak (Pink Dot)</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Spotify Currently Playing Player HUD -->
+        <div class="glass-card spotify-card">
+          <div class="card-title">
+            <span class="spotify-accent">🎵 Spotify Web Player & Sync Engine</span>
+            <span id="spotify-status" style="font-size: 0.8rem; font-weight: normal; color: #1DB954;">Active</span>
+          </div>
+
+          <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 16px;">
+            <div class="spotify-album-frame">
+              <img id="spotify-album-art" src="https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=300&q=80" alt="Album Cover">
+            </div>
+
+            <div style="flex: 1;">
+              <div id="spotify-track-title" style="font-size: 1.2rem; font-weight: 700; color: #fff;">Can't Hold Us</div>
+              <div id="spotify-track-artist" style="font-size: 0.9rem; color: var(--text-muted);">Macklemore & Ryan Lewis</div>
+              <div style="font-size: 0.8rem; color: #1DB954; margin-top: 4px; font-weight: 600;">
+                ⚡ Matched to Live Cadence via Adaptive Engine
+              </div>
+            </div>
+
+            <div>
+              <button id="btn-spotify-play" class="btn spotify-btn" style="width: 100px;">▶ Play</button>
+            </div>
+          </div>
+
+          <!-- Quick Workout Demo Tracks Selector -->
+          <div style="border-top: 1px solid var(--panel-border); padding-top: 12px;">
+            <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 8px;">🔥 Quick Workout Demo Tracks:</div>
+            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;">
+              <button class="spotify-demo-btn active">⚡ Can't Hold Us<br><small style="color: var(--text-muted);">146.0 BPM</small></button>
+              <button class="spotify-demo-btn">⚡ Blinding Lights<br><small style="color: var(--text-muted);">171.0 BPM</small></button>
+              <button class="spotify-demo-btn">⚡ Titanium (Sia)<br><small style="color: var(--text-muted);">126.0 BPM</small></button>
+              <button class="spotify-demo-btn">⚡ Eye of Tiger<br><small style="color: var(--text-muted);">109.0 BPM</small></button>
+            </div>
+          </div>
+        </div>
+      </main>
+
+      <!-- Sidebar Controls Panel -->
+      <aside>
+        <!-- Motion Axis Selector -->
+        <div class="glass-card">
+          <div class="card-title">📐 Motion Axis Alignment</div>
+
+          <div class="control-group">
+            <label><span style="font-size: 0.8rem;">Select Motion Projection</span></label>
+            <select id="axis-selector" class="axis-select">
+              <option value="vertical" selected>🌍 Earth Vertical (Up/Down) - Recommended</option>
+              <option value="magnitude">📐 3D Vector Magnitude</option>
+              <option value="z">⌚ Wrist Z-Axis (Back of Hand)</option>
+              <option value="y">💪 Arm Y-Axis (Forearm)</option>
+            </select>
+          </div>
+          <div style="font-size: 0.75rem; color: var(--text-muted);">
+            💡 Earth Vertical projects 3D acceleration onto gravity, giving signed +Up / -Down motion.
+          </div>
+        </div>
+
+        <!-- Peak Sensitivity & Calibration Controls -->
+        <div class="glass-card">
+          <div class="card-title">🎛️ Peak Calibration</div>
+
+          <div class="control-group">
+            <label>
+              <span>Sensitivity (Threshold)</span>
+              <span class="slider-val" id="sensitivity-val">0.5</span>
+            </label>
+            <input type="range" id="sensitivity-slider" min="0.1" max="1.5" step="0.1" value="0.5">
+          </div>
+
+          <div class="control-group">
+            <label>
+              <span>Min Lockout Distance</span>
+              <span class="slider-val" id="lockout-val">250 ms</span>
+            </label>
+            <input type="range" id="lockout-slider" min="150" max="600" step="25" value="250">
+          </div>
+        </div>
+
+        <!-- Voice Coach Feedback Settings -->
+        <div class="glass-card">
+          <div class="card-title">🗣 Audio & Voice Coach</div>
+
+          <div style="display: flex; flex-direction: column; gap: 12px;">
+            <label style="display: flex; align-items: center; justify-content: space-between; font-size: 0.85rem; cursor: pointer;">
+              <span>🗣 Spoken Voice Prompts</span>
+              <input type="checkbox" id="toggle-voice-feedback" style="width: 18px; height: 18px;">
+            </label>
+
+            <label style="display: flex; align-items: center; justify-content: space-between; font-size: 0.85rem; cursor: pointer;">
+              <span>🔔 Sync Bell / Warning Chimes</span>
+              <input type="checkbox" id="toggle-chimes" style="width: 18px; height: 18px;">
+            </label>
+          </div>
+        </div>
+
+        <!-- Spotify OAuth Connect -->
+        <div class="glass-card spotify-card">
+          <div class="card-title"><span class="spotify-accent">🔑 Spotify OAuth Connect</span></div>
+
+          <div class="control-group">
+            <label><span style="font-size: 0.8rem;">Spotify Client ID</span></label>
+            <input type="text" id="spotify-client-id" placeholder="Paste Client ID..." style="width: 100%; padding: 8px; border-radius: 6px; background: rgba(0,0,0,0.4); border: 1px solid var(--panel-border); color: #fff; font-size: 0.8rem;">
+          </div>
+
+          <button id="btn-spotify-connect" class="btn spotify-btn" style="margin-bottom: 8px;">🟢 Connect Spotify Account</button>
+        </div>
+
+        <!-- Watch Data Source -->
+        <div class="glass-card">
+          <div class="card-title">📡 Watch Data Source</div>
+
+          <div class="mode-selector">
+            <div class="mode-tab active" data-mode="synthetic">Simulator</div>
+            <div class="mode-tab" data-mode="device">Device API</div>
+            <div class="mode-tab" data-mode="network">Wi-Fi Stream</div>
+            <div class="mode-tab" data-mode="csv">CSV File</div>
+          </div>
+
+          <!-- Mode 1: Synthetic Controls -->
+          <div id="sec-synthetic">
+            <div class="control-group">
+              <label>
+                <span>Pedal / Stride Cadence</span>
+                <span class="slider-val" id="cadence-val">140</span>
+              </label>
+              <input type="range" id="cadence-slider" min="60" max="200" value="140">
+            </div>
+
+            <div class="control-group">
+              <label>
+                <span>Phase Shift (Offset)</span>
+                <span class="slider-val" id="phase-val">0 ms</span>
+              </label>
+              <input type="range" id="phase-slider" min="-150" max="150" value="0">
+            </div>
+          </div>
+
+          <!-- Mode 2: Device API -->
+          <div id="sec-device" style="display: none;">
+            <button id="btn-grant-sensors" class="btn" style="margin-bottom: 12px;">🔓 Enable Motion Sensors</button>
+            <div id="device-sensor-status" style="font-size: 0.8rem; color: #00ff88; font-family: monospace;">Waiting for activation...</div>
+          </div>
+
+          <!-- Mode 3: Wi-Fi Stream -->
+          <div id="sec-network" style="display: none;">
+            <div style="font-size: 0.8rem; color: #00ff88; font-family: monospace; background: rgba(0,0,0,0.5); padding: 8px; border-radius: 6px; margin-bottom: 10px;">
+              Endpoint: /api/imu_stream
+            </div>
+            <a href="/sensor_stream" target="_blank" class="btn btn-secondary" style="text-decoration: none; text-align: center; display: block;">
+              📱 Mobile Transmitter Page
+            </a>
+          </div>
+
+          <!-- Mode 4: CSV File -->
+          <div id="sec-csv" style="display: none;">
+            <input type="file" id="csv-file-input" accept=".csv" style="font-size: 0.85rem; color: var(--text-main);">
+          </div>
+        </div>
+
+        <!-- Music Target BPM Controls -->
+        <div class="glass-card">
+          <div class="card-title">🎵 Target Cadence / BPM</div>
+
+          <div class="control-group">
+            <label>
+              <span>Target BPM / Cadence</span>
+              <span class="slider-val" id="bpm-val">140</span>
+            </label>
+            <input type="range" id="bpm-slider" min="60" max="200" value="140">
+          </div>
+        </div>
+      </aside>
+    </div>
+  </div>
+
+  <script src="/adaptive_audio.js"></script>
+  <script src="/spotify_engine.js"></script>
+  <script src="/rhythm_engine.js"></script>
+  <script>
+    document.getElementById('btn-fullscreen').addEventListener('click', () => {
+      const el = document.querySelector('.hud-cockpit-card');
+      if (el) {
+        if (!document.fullscreenElement) {
+          el.requestFullscreen().catch(err => alert("Fullscreen error: " + err.message));
+        } else {
+          document.exitFullscreen();
+        }
+      }
+    });
+  </script>
+</body>
+</html>

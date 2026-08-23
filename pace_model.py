@@ -21,11 +21,22 @@ class PacePredictorModel:
         self.baseline_pace = 540.0 # ~9:00 min/mi
         self.feature_cols = []
         self.metrics = {}
-        
+        self.last_loaded_mtime = 0
+
+    def _is_csv_updated(self):
+        csv_path = os.path.join(self.base_dir, 'my_exercises.csv')
+        if not os.path.exists(csv_path):
+            return False
+        return os.path.getmtime(csv_path) > self.last_loaded_mtime
+
     def load_and_prepare_data(self):
         from historical_runs import auto_heal_exercises
         from weather_service import get_weather_for_runs
         
+        csv_path = os.path.join(self.base_dir, 'my_exercises.csv')
+        if os.path.exists(csv_path):
+            self.last_loaded_mtime = os.path.getmtime(csv_path)
+            
         df_raw = auto_heal_exercises(self.base_dir)
         if df_raw is None or df_raw.empty:
             if not os.path.exists(EXERCISES_CSV):
@@ -53,8 +64,15 @@ class PacePredictorModel:
             dt_utc = pd.to_datetime(start_time_iso, format='ISO8601')
             
             # UTC offset
-            off_str = str(row.get('exercise.interval.startUtcOffset', '-18000s'))
-            off_sec = int(float(off_str.replace('s', ''))) if off_str and off_str != 'nan' else -18000
+            off_val = row.get('exercise.interval.startUtcOffset')
+            if pd.notna(off_val) and str(off_val).strip() and str(off_val).lower() != 'nan':
+                try:
+                    off_sec = int(float(str(off_val).replace('s', '')))
+                except Exception:
+                    off_sec = -18000
+            else:
+                off_sec = -18000
+
             local_dt = dt_utc + pd.Timedelta(seconds=off_sec)
             
             # Metrics
@@ -65,7 +83,12 @@ class PacePredictorModel:
             if pd.notna(sec_per_meter) and sec_per_meter > 0:
                 pace_sec_mi = sec_per_meter * 1609.344
             else:
-                pace_sec_mi = 0
+                dur_str = str(row.get('exercise.activeDuration', '0s')).replace('s', '')
+                duration_sec = float(dur_str) if dur_str and dur_str.lower() != 'nan' else 0.0
+                if duration_sec > 0 and dist_mi > 0:
+                    pace_sec_mi = duration_sec / dist_mi
+                else:
+                    pace_sec_mi = 0
                 
             # Filter out accidental/short activities (<0.5 mi) and extreme outliers (>15:00 min/mi)
             if dist_mi < 0.5 or pace_sec_mi <= 0 or pace_sec_mi > 900:
@@ -124,8 +147,12 @@ class PacePredictorModel:
         self.df = df
         return df
 
-    def train(self):
-        if self.df is None or len(self.df) < 5:
+    def ensure_up_to_date(self):
+        if not self.is_trained or self._is_csv_updated():
+            self.train(force_reload=True)
+
+    def train(self, force_reload=False):
+        if force_reload or self.df is None or len(self.df) < 5 or self._is_csv_updated():
             self.load_and_prepare_data()
             
         df = self.df
@@ -200,8 +227,7 @@ class PacePredictorModel:
         return self.metrics
 
     def predict(self, distance_mi=4.0, temp_f=65.0, humidity=60.0, time_str="09:00", ran_yesterday=False, rest_days=2.0, recent_7d_miles=10.0, target_date_str=None, model_type="hybrid"):
-        if not self.is_trained:
-            self.train()
+        self.ensure_up_to_date()
             
         # Time parsing
         try:
@@ -311,8 +337,7 @@ class PacePredictorModel:
         }
 
     def get_improvement_timeline(self):
-        if not self.is_trained:
-            self.train()
+        self.ensure_up_to_date()
             
         df = self.df.copy()
         coefs = dict(zip(self.feature_cols, self.factor_model.coef_))
@@ -438,8 +463,7 @@ class PacePredictorModel:
         }
 
     def get_parameter_sensitivity_curves(self, distance_mi=4.0, temp_f=65.0, humidity=60.0, time_str="09:00", ran_yesterday=False, rest_days=2.0, recent_7d_miles=10.0, target_date_str=None, model_type="hybrid"):
-        if not self.is_trained:
-            self.train()
+        self.ensure_up_to_date()
             
         temp_curve = []
         for t in range(40, 96, 5):

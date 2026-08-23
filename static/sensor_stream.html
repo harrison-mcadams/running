@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mobile Sensor Transmitter</title>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    body {
+      background: #0a0e17;
+      color: #fff;
+      font-family: 'Outfit', sans-serif;
+      text-align: center;
+      padding: 30px 20px;
+      margin: 0;
+    }
+    .card {
+      background: rgba(18, 26, 42, 0.8);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 16px;
+      padding: 24px;
+      max-width: 400px;
+      margin: 0 auto;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+    }
+    .btn {
+      background: linear-gradient(135deg, #00f2fe 0%, #4facfe 100%);
+      color: #000;
+      font-size: 1.1rem;
+      font-weight: 700;
+      padding: 16px 24px;
+      border: none;
+      border-radius: 12px;
+      cursor: pointer;
+      width: 100%;
+      margin-top: 20px;
+    }
+    .metric {
+      font-size: 2.2rem;
+      font-weight: 700;
+      color: #00f2fe;
+      margin: 10px 0;
+    }
+    .status {
+      display: inline-block;
+      padding: 6px 16px;
+      border-radius: 20px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      margin: 10px 0;
+      background: rgba(255, 183, 0, 0.2);
+      color: #ffb700;
+    }
+    .status.active {
+      background: rgba(0, 255, 136, 0.2);
+      color: #00ff88;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>⌚ Watch / Phone Motion Transmitter</h2>
+    <p style="color: #8a99ad; font-size: 0.9rem;">Streams 3-axis accelerometer data to the Rhythm Sync Dashboard over Wi-Fi.</p>
+    
+    <div id="status" class="status">DISCONNECTED</div>
+    <div class="metric" id="mag-val">0.0 m/s²</div>
+    <div style="font-size: 0.8rem; color: #8a99ad;" id="samples-sent">Sent: 0 samples</div>
+
+    <button id="btn-start" class="btn">🚀 Start Motion Sensor</button>
+  </div>
+
+  <script>
+    let isStreaming = false;
+    let sampleBuffer = [];
+    let samplesCount = 0;
+    const statusEl = document.getElementById('status');
+    const magEl = document.getElementById('mag-val');
+    const sentEl = document.getElementById('samples-sent');
+    const btnStart = document.getElementById('btn-start');
+
+    btnStart.addEventListener('click', async () => {
+      // Request Motion Permission on iOS 13+ / Android
+      if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+        try {
+          const resp = await DeviceMotionEvent.requestPermission();
+          if (resp !== 'granted') {
+            alert('Motion sensor permission denied!');
+            return;
+          }
+        } catch (e) {
+          console.warn(e);
+        }
+      }
+
+      isStreaming = !isStreaming;
+      if (isStreaming) {
+        btnStart.textContent = '⏹ Stop Streaming';
+        statusEl.textContent = 'STREAMING LIVE ⚡';
+        statusEl.className = 'status active';
+        window.addEventListener('devicemotion', handleMotion);
+      } else {
+        btnStart.textContent = '🚀 Start Motion Sensor';
+        statusEl.textContent = 'PAUSED';
+        statusEl.className = 'status';
+        window.removeEventListener('devicemotion', handleMotion);
+      }
+    });
+
+    function handleMotion(event) {
+      if (!isStreaming) return;
+
+      const acc = event.accelerationIncludingGravity || event.acceleration;
+      if (acc && acc.x !== null) {
+        const ax = acc.x || 0;
+        const ay = acc.y || 0;
+        const az = acc.z || 0;
+        const mag = Math.sqrt(ax*ax + ay*ay + az*az);
+        magEl.textContent = `${mag.toFixed(2)} m/s²`;
+
+        sampleBuffer.push({
+          ts: performance.now() / 1000.0,
+          ax: ax,
+          ay: ay,
+          az: az
+        });
+      }
+    }
+
+    // Flush batch every 100ms
+    setInterval(async () => {
+      if (sampleBuffer.length === 0) return;
+
+      const batch = [...sampleBuffer];
+      sampleBuffer = [];
+
+      try {
+        await fetch('/api/imu_stream', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(batch)
+        });
+        samplesCount += batch.length;
+        sentEl.textContent = `Sent: ${samplesCount} samples`;
+      } catch (err) {
+        console.warn('Stream POST error:', err);
+      }
+    }, 100);
+  </script>
+</body>
+</html>

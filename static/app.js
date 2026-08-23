@@ -504,6 +504,12 @@ async function initDashboard() {
         // Render default chart
         renderMainChart();
         
+        // Refresh predictor view if active
+        const predictorView = document.getElementById('predictor-view');
+        if (predictorView && predictorView.style.display !== 'none') {
+            onPredictorViewActive();
+        }
+        
     } catch (error) {
         console.error('Error initializing dashboard:', error);
         document.getElementById('runs-table-body').innerHTML = `

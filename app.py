@@ -316,7 +316,7 @@ def sync_data():
         )
         print("Data sync script output:\n", result.stdout)
         try:
-            model_instance.train()
+            model_instance.train(force_reload=True)
             print("Pace predictor retrained on new synced data.")
         except Exception as te:
             print("Model retrain error:", te)
@@ -571,10 +571,12 @@ def get_current_conditions():
             
         ran_yesterday = False
         rest_days = 2.0
+        model_instance.ensure_up_to_date()
         if model_instance.df is not None and not model_instance.df.empty:
             last_run_dt = model_instance.df['local_dt'].max()
             today_dt = pd.to_datetime(now)
-            days_diff = (today_dt - last_run_dt.tz_localize(None)).total_seconds() / (24 * 3600.0)
+            last_dt_naive = last_run_dt.tz_localize(None) if hasattr(last_run_dt, 'tz_localize') and getattr(last_run_dt, 'tz', None) is not None else last_run_dt
+            days_diff = (today_dt - last_dt_naive).total_seconds() / (24 * 3600.0)
             rest_days = max(1.0, round(float(days_diff), 1))
             ran_yesterday = bool(days_diff <= 1.5)
             
@@ -964,5 +966,99 @@ def get_progress_curves():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route('/rhythm')
+def serve_rhythm_test():
+    """Serve the interactive Motion Cadence & Beat Matching Test Bench."""
+    return send_from_directory('static', 'rhythm_test.html')
+
+
+@app.route('/sensor_stream')
+def serve_sensor_stream():
+    """Serve the mobile sensor transmitter page."""
+    return send_from_directory('static', 'sensor_stream.html')
+
+
+
+# In-memory ring buffer for live watch IMU samples
+live_imu_buffer = []
+
+@app.route('/api/imu_stream', methods=['POST'])
+def receive_imu_stream():
+    """Receive live raw accelerometer samples from watch / mobile app."""
+    global live_imu_buffer
+    try:
+        data = request.get_json(force=True)
+        if isinstance(data, dict):
+            samples = [data]
+        elif isinstance(data, list):
+            samples = data
+        else:
+            return jsonify({"error": "Invalid format"}), 400
+
+        for s in samples:
+            live_imu_buffer.append({
+                "ts": s.get("timestamp", s.get("ts", 0)),
+                "ax": float(s.get("ax", 0.0)),
+                "ay": float(s.get("ay", 0.0)),
+                "az": float(s.get("az", 0.0))
+            })
+        
+        # Keep last 500 samples
+        if len(live_imu_buffer) > 500:
+            live_imu_buffer = live_imu_buffer[-500:]
+
+        return jsonify({"status": "ok", "received": len(samples)})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/imu_stream/latest', methods=['GET'])
+def get_imu_stream_latest():
+    """Retrieve buffered live samples for web HUD."""
+    global live_imu_buffer
+    samples = list(live_imu_buffer)
+    live_imu_buffer.clear()
+    return jsonify(samples)
+
+
+@app.route('/spotify/login')
+def spotify_login():
+    """Redirect to Spotify OAuth Authorization screen."""
+    client_id = request.args.get('client_id', '')
+    redirect_uri = request.host_url.rstrip('/') + '/spotify/callback'
+    scope = 'user-read-playback-state user-modify-playback-state user-read-currently-playing streaming'
+    
+    spotify_url = (
+        f"https://accounts.spotify.com/authorize?response_type=token"
+        f"&client_id={client_id}&scope={scope}&redirect_uri={redirect_uri}"
+    )
+    return redirect(spotify_url)
+
+
+@app.route('/spotify/callback')
+def spotify_callback():
+    """Handle Spotify OAuth redirect and pass token back to Rhythm UI."""
+    return """
+    <html>
+      <body>
+        <script>
+          const hash = window.location.hash.substring(1);
+          const params = new URLSearchParams(hash);
+          const accessToken = params.get('access_token');
+          if (accessToken) {
+            localStorage.setItem('spotify_access_token', accessToken);
+            window.location.href = '/rhythm?spotify_connected=true';
+          } else {
+            window.location.href = '/rhythm?spotify_error=true';
+          }
+        </script>
+      </body>
+    </html>
+    """
+
+
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=8088)
+
+
+
