@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { CartesianGrid, ComposedChart, Line, ResponsiveContainer, Scatter, Tooltip, XAxis, YAxis, ZAxis } from 'recharts'
+import { CartesianGrid, ComposedChart, Line, ReferenceLine, ResponsiveContainer, Scatter, ScatterChart, Tooltip, XAxis, YAxis, ZAxis } from 'recharts'
 import { api, type Group, type GroupDetail, type GroupMember, type Run } from '../api'
 import { dayNumberToIso, fmtDate, fmtNum, fmtPace, fmtSigned, linearTrend, toDayNumber } from '../lib/format'
 import { axisProps, clickedRunId, gridProps, Legend, paceDomain, paceTicks, series, Tip, type RechartsTip } from '../components/charts'
@@ -271,16 +271,16 @@ function GroupTime({ included, focusId, onOpen }: { included: GroupMember[]; foc
     <>
       <div className="chart">
         <ResponsiveContainer>
-          <ComposedChart margin={{ left: 0, right: 12, top: 8, bottom: 0 }}>
+          <ScatterChart margin={{ left: 0, right: 12, top: 8, bottom: 0 }}>
             <CartesianGrid {...gridProps} />
             <XAxis dataKey="x" type="number" domain={[x0 - 5, x1 + 5]} tickFormatter={(v) => fmtDate(dayNumberToIso(v))} {...axisProps} />
             <YAxis dataKey="y" type="number" domain={domain} ticks={paceTicks(domain)} reversed tickFormatter={fmtPace} width={44} {...axisProps} />
             <ZAxis range={[60, 60]} />
             <Tooltip cursor={false} content={(p: RechartsTip) => tip(p)} />
-            <Line data={trendData} dataKey="y" stroke="var(--ink-3)" strokeWidth={1.5} dot={false} isAnimationActive={false} />
+            {trendData.length === 2 && <ReferenceLine segment={[trendData[0], trendData[1]]} stroke="var(--ink-3)" strokeWidth={1.5} ifOverflow="hidden" />}
             <Scatter data={othersPts} fill={series.blue} stroke="var(--surface)" strokeWidth={2} isAnimationActive={false} onClick={(d) => { const id = clickedRunId(d); if (id) onOpen(id) }} />
             <Scatter data={focusPts} fill={series.orange} stroke="var(--surface)" strokeWidth={2} shape={(p: { cx?: number; cy?: number }) => <circle cx={p.cx} cy={p.cy} r={8} fill={series.orange} stroke="var(--surface)" strokeWidth={2} />} isAnimationActive={false} />
-          </ComposedChart>
+          </ScatterChart>
         </ResponsiveContainer>
       </div>
       <Legend items={[{ color: series.orange, label: 'Selected run', dot: true }, { color: series.blue, label: 'Similar runs', dot: true }, { color: 'var(--ink-3)', label: 'Trend' }]} />

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { CartesianGrid, Line, ComposedChart, ResponsiveContainer, Scatter, Tooltip, XAxis, YAxis, ZAxis } from 'recharts'
+import { CartesianGrid, ReferenceLine, ResponsiveContainer, Scatter, ScatterChart, Tooltip, XAxis, YAxis, ZAxis } from 'recharts'
 import type { Run } from '../api'
 import { dayNumberToIso, fmtDate, fmtNum, fmtPace, linearTrend, toDayNumber } from '../lib/format'
 import { axisProps, clickedRunId, gridProps, Legend, paceDomain, paceTicks, series, Tip, type RechartsTip } from '../components/charts'
@@ -277,15 +277,15 @@ function TimeChart({ runs, metric, color, reversed, fmt, onOpen, unit, domainZer
     <>
       <div className="chart">
         <ResponsiveContainer>
-          <ComposedChart margin={{ left: 0, right: 12, top: 8, bottom: 0 }}>
+          <ScatterChart margin={{ left: 0, right: 12, top: 8, bottom: 0 }}>
             <CartesianGrid {...gridProps} />
             <XAxis dataKey="x" type="number" domain={[x0 - 3, x1 + 3]} tickFormatter={(v) => fmtDate(dayNumberToIso(v))} {...axisProps} />
             <YAxis dataKey="y" type="number" domain={domain} ticks={metric === 'pace_sec_mi' ? paceTicks(domain) : undefined} reversed={reversed} tickFormatter={fmt} width={44} {...axisProps} />
             <ZAxis range={[60, 60]} />
             <Tooltip cursor={false} content={(p: RechartsTip) => runTip(p, metric, fmt, unit)} />
-            <Line data={trendData} dataKey="y" stroke="var(--ink-3)" strokeWidth={1.5} dot={false} isAnimationActive={false} type="linear" />
+            {trendData.length === 2 && <ReferenceLine segment={[trendData[0], trendData[1]]} stroke="var(--ink-3)" strokeWidth={1.5} ifOverflow="hidden" />}
             <Scatter data={pts} fill={color} stroke="var(--surface)" strokeWidth={2} isAnimationActive={false} onClick={(d) => { const id = clickedRunId(d); if (id) onOpen(id) }} style={{ cursor: 'pointer' }} />
-          </ComposedChart>
+          </ScatterChart>
         </ResponsiveContainer>
       </div>
       {trend && pts.length > 3 && (
@@ -306,14 +306,14 @@ function DistancePace({ runs, onOpen }: { runs: Run[]; onOpen: (id: string) => v
   return (
     <div className="chart">
       <ResponsiveContainer>
-        <ComposedChart margin={{ left: 0, right: 12, top: 8, bottom: 0 }}>
+        <ScatterChart margin={{ left: 0, right: 12, top: 8, bottom: 0 }}>
           <CartesianGrid {...gridProps} />
           <XAxis dataKey="x" type="number" domain={['auto', 'auto']} tickFormatter={(v) => `${v} mi`} {...axisProps} />
           <YAxis dataKey="y" type="number" domain={domain} ticks={paceTicks(domain)} reversed tickFormatter={fmtPace} width={44} {...axisProps} />
           <ZAxis range={[60, 60]} />
           <Tooltip cursor={false} content={(p: RechartsTip) => runTip(p, 'pace_sec_mi', fmtPace, '/mi')} />
           <Scatter data={pts} fill={series.blue} stroke="var(--surface)" strokeWidth={2} isAnimationActive={false} onClick={(d) => { const id = clickedRunId(d); if (id) onOpen(id) }} style={{ cursor: 'pointer' }} />
-        </ComposedChart>
+        </ScatterChart>
       </ResponsiveContainer>
     </div>
   )
