@@ -130,7 +130,9 @@ def _runs_needing(conn, what: str) -> list[dict]:
         sql = """SELECT a.id, a.name, a.start_time, a.end_time FROM activities a
                  LEFT JOIN route_meta rm ON rm.activity_id = a.id
                  WHERE a.activity_type = 'RUNNING' AND a.has_gps = 1
-                   AND (rm.activity_id IS NULL OR (rm.n_points = 0 AND rm.fetch_error IS NOT NULL AND rm.fetched_at < ?))"""
+                   AND (rm.activity_id IS NULL
+                        OR (rm.n_points = 0 AND rm.fetch_error IS NULL)
+                        OR (rm.n_points = 0 AND rm.fetched_at < ?))"""
         cutoff = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat(timespec="seconds")
         return [dict(r) for r in conn.execute(sql, (cutoff,)).fetchall()]
     if what == "hr":
@@ -180,6 +182,9 @@ def enrich_offline() -> None:
     """Weather, elevation, similarity and groups. Needs only Open-Meteo, not Google."""
     state.phase = "weather"
     with db() as conn:
+        n = store.infer_locations(conn)
+        if n:
+            state.note(f"Borrowed a start location for {n} runs without GPS.")
         runs = conn.execute(
             """SELECT a.id, a.start_time, rm.start_lat, rm.start_lon FROM activities a
                LEFT JOIN route_meta rm ON rm.activity_id = a.id

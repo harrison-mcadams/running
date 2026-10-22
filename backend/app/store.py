@@ -53,11 +53,12 @@ def store_route(conn: sqlite3.Connection, activity_id: str, points: list[dict], 
     track = geo.resample(points)
     bearing = geo.start_bearing_deg(track) if track is not None else None
     conn.execute(
-        """INSERT INTO route_meta (activity_id, n_points, start_lat, start_lon, elevation_gain_m, start_bearing_deg, fetch_error, fetched_at)
-           VALUES (?, ?, ?, ?, ?, ?, NULL, ?)
+        """INSERT INTO route_meta (activity_id, n_points, start_lat, start_lon, elevation_gain_m, start_bearing_deg, location_inferred, fetch_error, fetched_at)
+           VALUES (?, ?, ?, ?, ?, ?, 0, NULL, ?)
            ON CONFLICT(activity_id) DO UPDATE SET n_points = excluded.n_points, start_lat = excluded.start_lat,
              start_lon = excluded.start_lon, elevation_gain_m = excluded.elevation_gain_m,
-             start_bearing_deg = excluded.start_bearing_deg, fetch_error = NULL, fetched_at = excluded.fetched_at""",
+             start_bearing_deg = excluded.start_bearing_deg, location_inferred = 0, elevation_m = NULL,
+             fetch_error = NULL, fetched_at = excluded.fetched_at""",
         (
             activity_id,
             len(points),
@@ -68,6 +69,43 @@ def store_route(conn: sqlite3.Connection, activity_id: str, points: list[dict], 
             _now(),
         ),
     )
+
+
+def infer_locations(conn: sqlite3.Connection) -> int:
+    """Give runs without a GPS track a start location borrowed from the nearest-in-time GPS run
+    recorded in the same UTC offset (so a no-GPS run in Tanzania borrows a Tanzanian run, not
+    the home trail). Weather and altitude lookups then use it. Returns the number filled."""
+    known = conn.execute(
+        """SELECT a.start_time, a.utc_offset_sec, rm.start_lat, rm.start_lon FROM activities a
+           JOIN route_meta rm ON rm.activity_id = a.id
+           WHERE rm.n_points > 0 AND rm.start_lat IS NOT NULL"""
+    ).fetchall()
+    todo = conn.execute(
+        """SELECT a.id, a.start_time, a.utc_offset_sec FROM activities a
+           LEFT JOIN route_meta rm ON rm.activity_id = a.id
+           WHERE a.activity_type = 'RUNNING' AND (rm.activity_id IS NULL OR rm.n_points = 0)
+             AND (rm.start_lat IS NULL OR rm.location_inferred = 1)"""
+    ).fetchall()
+    if not known:
+        return 0
+    n = 0
+    for r in todo:
+        t = pd.Timestamp(r["start_time"])
+        pool = [k for k in known if r["utc_offset_sec"] is not None and k["utc_offset_sec"] == r["utc_offset_sec"]] or list(known)
+        best = min(pool, key=lambda k: abs((pd.Timestamp(k["start_time"]) - t).total_seconds()))
+        cur = conn.execute("SELECT start_lat, start_lon FROM route_meta WHERE activity_id = ?", (r["id"],)).fetchone()
+        if cur and cur["start_lat"] == best["start_lat"] and cur["start_lon"] == best["start_lon"]:
+            continue
+        conn.execute(
+            """INSERT INTO route_meta (activity_id, n_points, start_lat, start_lon, location_inferred) VALUES (?, 0, ?, ?, 1)
+               ON CONFLICT(activity_id) DO UPDATE SET start_lat = excluded.start_lat, start_lon = excluded.start_lon,
+                 location_inferred = 1, elevation_m = NULL""",
+            (r["id"], best["start_lat"], best["start_lon"]),
+        )
+        # Location changed, so any weather fetched for the old guess is stale.
+        conn.execute("DELETE FROM weather WHERE activity_id = ?", (r["id"],))
+        n += 1
+    return n
 
 
 def mark_route_failed(conn: sqlite3.Connection, activity_id: str, error: str) -> None:
@@ -149,7 +187,7 @@ def list_runs(conn: sqlite3.Connection, include_hidden: bool = False) -> list[di
         SELECT a.*, w.temp_f, w.feels_like_f, w.humidity, w.dew_point_f, w.wind_mph, w.condition, w.weather_code,
                w.lat AS w_lat, w.lon AS w_lon,
                rm.n_points, rm.start_lat, rm.start_lon, rm.elevation_m, rm.elevation_gain_m AS gps_gain_m,
-               rm.start_bearing_deg,
+               rm.start_bearing_deg, rm.location_inferred,
                g.group_id, g.same_direction, gn.name AS group_name,
                (SELECT COUNT(*) FROM hr_samples h WHERE h.activity_id = a.id) AS n_hr,
                (SELECT COUNT(*) FROM splits s WHERE s.activity_id = a.id) AS n_splits
@@ -248,6 +286,7 @@ def _run_record(r: sqlite3.Row) -> dict | None:
         "start_lon": r["start_lon"],
         "start_bearing_deg": round(r["start_bearing_deg"]) if r["start_bearing_deg"] is not None else None,
         "heading": geo.compass_label(r["start_bearing_deg"]),
+        "location_inferred": bool(r["location_inferred"]),
         "zones": {
             "light_sec": r["zone_light_sec"] or 0,
             "moderate_sec": r["zone_moderate_sec"] or 0,

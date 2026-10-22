@@ -84,7 +84,12 @@ def import_legacy(conn: sqlite3.Connection) -> dict:
                 continue
             if not conn.execute("SELECT 1 FROM activities WHERE id = ?", (act_id,)).fetchone():
                 continue
-            rm = conn.execute("SELECT start_lat, start_lon FROM route_meta WHERE activity_id = ?", (act_id,)).fetchone()
+            rm = conn.execute(
+                "SELECT start_lat, start_lon FROM route_meta WHERE activity_id = ? AND n_points > 0", (act_id,)
+            ).fetchone()
+            if rm is None or rm["start_lat"] is None:
+                # The old app guessed Philadelphia for runs without GPS; refetch at an inferred location instead.
+                continue
             store.store_weather(
                 conn,
                 act_id,
@@ -96,8 +101,8 @@ def import_legacy(conn: sqlite3.Connection) -> dict:
                     "wind_mph": w.get("wind_mph"),
                     "weather_code": w.get("weather_code"),
                     "condition": w.get("condition"),
-                    "lat": rm["start_lat"] if rm else None,
-                    "lon": rm["start_lon"] if rm else None,
+                    "lat": rm["start_lat"],
+                    "lon": rm["start_lon"],
                     "fetched_at": None,
                 },
             )

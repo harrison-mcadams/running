@@ -40,6 +40,7 @@ export interface Run {
   start_lon: number | null
   start_bearing_deg: number | null
   heading: string | null
+  location_inferred: boolean
   zones: Zones
   weather: Weather | null
   group_id: number | null

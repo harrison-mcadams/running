@@ -75,6 +75,7 @@ CREATE TABLE IF NOT EXISTS route_meta (
     elevation_m REAL,          -- terrain elevation at start (DEM), metres
     elevation_gain_m REAL,     -- computed from smoothed GPS altitude
     start_bearing_deg REAL,    -- compass heading of the first ~800 m
+    location_inferred INTEGER, -- 1 when start_lat/lon were borrowed from a nearby GPS run
     fetch_error TEXT,
     fetched_at TEXT
 );
@@ -143,6 +144,7 @@ def connect() -> sqlite3.Connection:
 
 MIGRATIONS = [
     ("route_meta", "start_bearing_deg", "ALTER TABLE route_meta ADD COLUMN start_bearing_deg REAL"),
+    ("route_meta", "location_inferred", "ALTER TABLE route_meta ADD COLUMN location_inferred INTEGER"),
 ]
 
 

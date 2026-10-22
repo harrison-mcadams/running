@@ -172,6 +172,7 @@ function Body({ run }: { run: RunDetailT }) {
               <Row k="Dew point" v={run.weather?.dew_point_f != null ? `${run.weather.dew_point_f}°F` : '–'} />
               <Row k="Wind" v={run.weather?.wind_mph != null ? `${run.weather.wind_mph} mph` : '–'} />
               <Row k="Source" v={run.source ?? '–'} />
+              {run.location_inferred && <Row k="Location" v="No GPS; weather and altitude use a nearby run's start" />}
             </tbody>
           </table>
         </div>
