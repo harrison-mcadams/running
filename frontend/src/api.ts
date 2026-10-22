@@ -42,6 +42,7 @@ export interface Run {
   heading: string | null
   location_inferred: boolean
   excluded_from_model: boolean
+  hidden: boolean
   n_comments: number
   zones: Zones
   weather: Weather | null
@@ -215,6 +216,9 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
 export const api = {
   runs: () => request<Run[]>('/api/runs'),
   run: (id: string) => request<RunDetail>(`/api/runs/${id}`),
+  setHidden: (id: string, hidden: boolean) =>
+    request<{ ok: boolean; hidden: boolean }>(`/api/runs/${id}/hidden`, { method: 'PUT', body: JSON.stringify({ hidden }) }),
+  hiddenRuns: () => request<Run[]>('/api/runs/hidden'),
   setExcluded: (id: string, excluded: boolean) =>
     request<{ ok: boolean; excluded_from_model: boolean }>(`/api/runs/${id}/exclude`, { method: 'PUT', body: JSON.stringify({ excluded }) }),
   addComment: (id: string, body: string) => request<RunComment>(`/api/runs/${id}/comments`, { method: 'POST', body: JSON.stringify({ body }) }),

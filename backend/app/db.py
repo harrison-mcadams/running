@@ -118,6 +118,7 @@ CREATE TABLE IF NOT EXISTS group_names (
 CREATE TABLE IF NOT EXISTS run_flags (
     activity_id TEXT PRIMARY KEY,
     exclude_from_model INTEGER NOT NULL DEFAULT 0,
+    hidden INTEGER NOT NULL DEFAULT 0,
     updated_at TEXT
 );
 
@@ -159,6 +160,7 @@ def connect() -> sqlite3.Connection:
 MIGRATIONS = [
     ("route_meta", "start_bearing_deg", "ALTER TABLE route_meta ADD COLUMN start_bearing_deg REAL"),
     ("route_meta", "location_inferred", "ALTER TABLE route_meta ADD COLUMN location_inferred INTEGER"),
+    ("run_flags", "hidden", "ALTER TABLE run_flags ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0"),
 ]
 
 

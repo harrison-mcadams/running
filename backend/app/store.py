@@ -128,6 +128,19 @@ def delete_comment(conn: sqlite3.Connection, activity_id: str, comment_id: int) 
     return cur.rowcount > 0
 
 
+def set_hidden(conn: sqlite3.Connection, activity_id: str, hidden: bool) -> None:
+    conn.execute(
+        """INSERT INTO run_flags (activity_id, hidden, updated_at) VALUES (?, ?, ?)
+           ON CONFLICT(activity_id) DO UPDATE SET hidden = excluded.hidden, updated_at = excluded.updated_at""",
+        (activity_id, 1 if hidden else 0, _now()),
+    )
+
+
+def hidden_runs(conn: sqlite3.Connection) -> list[dict]:
+    """Runs the user hid by hand (not those filtered by the data rules)."""
+    return [r for r in list_runs(conn, include_hidden=True) if r["hidden"]]
+
+
 def set_excluded(conn: sqlite3.Connection, activity_id: str, excluded: bool) -> None:
     conn.execute(
         """INSERT INTO run_flags (activity_id, exclude_from_model, updated_at) VALUES (?, ?, ?)
@@ -217,7 +230,7 @@ def list_runs(conn: sqlite3.Connection, include_hidden: bool = False) -> list[di
                w.lat AS w_lat, w.lon AS w_lon,
                rm.n_points, rm.start_lat, rm.start_lon, rm.elevation_m, rm.elevation_gain_m AS gps_gain_m,
                rm.start_bearing_deg, rm.location_inferred,
-               g.group_id, g.same_direction, gn.name AS group_name, COALESCE(f.exclude_from_model, 0) AS excluded,
+               g.group_id, g.same_direction, gn.name AS group_name, COALESCE(f.exclude_from_model, 0) AS excluded, COALESCE(f.hidden, 0) AS hidden_flag,
                (SELECT COUNT(*) FROM hr_samples h WHERE h.activity_id = a.id) AS n_hr,
                (SELECT COUNT(*) FROM splits s WHERE s.activity_id = a.id) AS n_splits,
                (SELECT COUNT(*) FROM run_comments c WHERE c.activity_id = a.id) AS n_comments
@@ -237,6 +250,8 @@ def list_runs(conn: sqlite3.Connection, include_hidden: bool = False) -> list[di
         if rec is None:
             continue
         if not include_hidden:
+            if rec["hidden"]:
+                continue
             if flt["hidden_before"] and rec["date"] < flt["hidden_before"]:
                 continue
             if rec["distance_mi"] < flt["min_distance_mi"]:
@@ -330,6 +345,7 @@ def _run_record(r: sqlite3.Row) -> dict | None:
         "same_direction": r["same_direction"],
         "source": r["source_device"] or r["source_platform"],
         "excluded_from_model": bool(r["excluded"]),
+        "hidden": bool(r["hidden_flag"]),
         "n_comments": r["n_comments"],
     }
 

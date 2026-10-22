@@ -46,6 +46,12 @@ def api_runs(include_hidden: bool = False) -> list[dict]:
         return store.list_runs(conn, include_hidden=include_hidden)
 
 
+@app.get("/api/runs/hidden")
+def api_hidden_runs() -> list[dict]:
+    with db() as conn:
+        return store.hidden_runs(conn)
+
+
 @app.get("/api/runs/{run_id}")
 def api_run(run_id: str) -> dict:
     with db() as conn:
@@ -66,6 +72,18 @@ def api_run(run_id: str) -> dict:
 def _require_run(conn, run_id: str) -> None:
     if not conn.execute("SELECT 1 FROM activities WHERE id = ?", (run_id,)).fetchone():
         raise HTTPException(404, "run not found")
+
+
+@app.put("/api/runs/{run_id}/hidden")
+def api_run_hidden(run_id: str, body: dict = Body(...)) -> dict:
+    hidden = bool(body.get("hidden"))
+    with db() as conn:
+        _require_run(conn, run_id)
+        store.set_hidden(conn, run_id, hidden)
+    # Route groups and the model are built from visible runs only.
+    sync.update_similarity_and_groups()
+    model_service.invalidate()
+    return {"ok": True, "hidden": hidden}
 
 
 @app.put("/api/runs/{run_id}/exclude")

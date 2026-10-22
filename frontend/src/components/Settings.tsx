@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { api, type AuthStatus, type Settings, type SyncStatus } from '../api'
+import { api, type AuthStatus, type Run, type Settings, type SyncStatus } from '../api'
+import { fmtDate, fmtNum } from '../lib/format'
 
 export function SettingsSheet({ onClose, sync, onSync, onDataChanged }: { onClose: () => void; sync: SyncStatus | null; onSync: (full: boolean) => void; onDataChanged: () => void }) {
   const [auth, setAuth] = useState<AuthStatus | null>(null)
@@ -110,6 +111,8 @@ export function SettingsSheet({ onClose, sync, onSync, onDataChanged }: { onClos
           {sync?.log?.length ? <div className="log">{sync.log.join('\n')}</div> : <p className="muted small">No sync this session yet.</p>}
         </div>
 
+        <HiddenRuns onDataChanged={onDataChanged} />
+
         {settings && (
           <div className="card">
             <div className="card-head">
@@ -155,6 +158,54 @@ export function SettingsSheet({ onClose, sync, onSync, onDataChanged }: { onClos
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+function HiddenRuns({ onDataChanged }: { onDataChanged: () => void }) {
+  const [runs, setRuns] = useState<Run[] | null>(null)
+  const [busy, setBusy] = useState<string | null>(null)
+  useEffect(() => {
+    api.hiddenRuns().then(setRuns).catch(() => setRuns([]))
+  }, [])
+  const unhide = async (id: string) => {
+    setBusy(id)
+    try {
+      await api.setHidden(id, false)
+      setRuns((cur) => (cur ?? []).filter((r) => r.id !== id))
+      onDataChanged()
+    } finally {
+      setBusy(null)
+    }
+  }
+  return (
+    <div className="card">
+      <div className="card-head">
+        <h2>Hidden runs</h2>
+        <p>Left out of every view. Hide a run from its detail sheet.</p>
+      </div>
+      {runs == null ? (
+        <p className="muted small">Loading…</p>
+      ) : runs.length === 0 ? (
+        <p className="muted small">No hidden runs.</p>
+      ) : (
+        <table>
+          <tbody>
+            {runs.map((r) => (
+              <tr key={r.id}>
+                <td>{fmtDate(r.date, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}</td>
+                <td className="num">{fmtNum(r.distance_mi, 2)} mi</td>
+                <td className="num">{r.pace_str ?? '–'} /mi</td>
+                <td className="num">
+                  <button className="btn small" onClick={() => unhide(r.id)} disabled={busy === r.id}>
+                    Unhide
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
     </div>
   )
 }

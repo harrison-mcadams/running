@@ -6,12 +6,14 @@ export function RunNotes({
   runId,
   comments,
   excluded,
+  hidden,
   onChanged,
 }: {
   runId: string
   comments: RunComment[]
   excluded: boolean
-  onChanged: (patch: { comments?: RunComment[]; excluded_from_model?: boolean }) => void
+  hidden: boolean
+  onChanged: (patch: { comments?: RunComment[]; excluded_from_model?: boolean; hidden?: boolean }) => void
 }) {
   const [draft, setDraft] = useState('')
   const [busy, setBusy] = useState(false)
@@ -49,6 +51,13 @@ export function RunNotes({
       onChanged({ excluded_from_model: r.excluded_from_model })
     })
 
+  const toggleHidden = () =>
+    act(async () => {
+      if (!hidden && !window.confirm('Hide this run everywhere? You can bring it back from Settings → Hidden runs.')) return
+      const r = await api.setHidden(runId, !hidden)
+      onChanged({ hidden: r.hidden })
+    })
+
   return (
     <div className="card notes">
       <div className="card-head">
@@ -58,7 +67,12 @@ export function RunNotes({
           <span>Use in pace model</span>
         </label>
       </div>
-      {excluded && <div className="banner">This run is left out of the pace model. It still shows in your runs and routes.</div>}
+      {hidden && (
+        <div className="banner">
+          This run is hidden from every view. <button className="link" onClick={toggleHidden} disabled={busy}>Unhide</button>
+        </div>
+      )}
+      {excluded && !hidden && <div className="banner">This run is left out of the pace model. It still shows in your runs and routes.</div>}
       {err && <div className="banner error">{err}</div>}
       {comments.length > 0 ? (
         <ul className="comments">
@@ -94,6 +108,13 @@ export function RunNotes({
           Add
         </button>
       </div>
+      {!hidden && (
+        <div style={{ marginTop: 10, textAlign: 'right' }}>
+          <button className="link" onClick={toggleHidden} disabled={busy} title="Remove this run from the runs list, totals, charts, routes and the model">
+            Hide this run everywhere
+          </button>
+        </div>
+      )}
     </div>
   )
 }

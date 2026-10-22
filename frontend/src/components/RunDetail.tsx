@@ -47,6 +47,11 @@ export function RunDetailSheet({ id, onClose, onChanged }: { id: string; onClose
           <Body
             run={run}
             onPatch={(patch) => {
+              if (patch.hidden) {
+                onChanged()
+                onClose()
+                return
+              }
               setRun({ ...run, ...patch, n_comments: (patch.comments ?? run.comments).length })
               onChanged()
             }}
@@ -73,7 +78,7 @@ function Body({ run, onPatch }: { run: RunDetailT; onPatch: (patch: Partial<RunD
         <Stat label="Elev. gain" value={run.elevation_gain_ft != null ? `${run.elevation_gain_ft} ft` : '–'} />
       </div>
 
-      <RunNotes runId={run.id} comments={run.comments} excluded={run.excluded_from_model} onChanged={onPatch} />
+      <RunNotes runId={run.id} comments={run.comments} excluded={run.excluded_from_model} hidden={run.hidden} onChanged={onPatch} />
 
       <div className="grid-2" style={{ marginTop: 14 }}>
         <div className="card">
