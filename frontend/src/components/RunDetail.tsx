@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
-import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis, LabelList } from 'recharts'
+import { Bar, BarChart, CartesianGrid, Cell, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis, LabelList } from 'recharts'
 import { api, type RunDetail as RunDetailT } from '../api'
-import { fmtDateLong, fmtDuration, fmtNum, fmtPace, fmtTime12 } from '../lib/format'
+import { fmtDateLong, fmtDuration, fmtNum, fmtPace, fmtTime12, FULL_SPLIT_MI, STUB_SPLIT_MI } from '../lib/format'
 import { axisProps, gridProps, paceDomain, paceTicks, series, Tip, type RechartsTip } from './charts'
 import { RouteMap } from './RouteMap'
 import { RunNotes } from './RunNotes'
@@ -65,7 +65,11 @@ export function RunDetailSheet({ id, onClose, onChanged }: { id: string; onClose
 function Body({ run, onPatch }: { run: RunDetailT; onPatch: (patch: Partial<RunDetailT>) => void }) {
   const zones = run.zones
   const zoneTotal = zones.light_sec + zones.moderate_sec + zones.vigorous_sec + zones.peak_sec
-  const splitDomain = paceDomain(run.splits.map((s) => s.pace_sec_mi ?? 0))
+  // Drop recording stubs; show a real partial final mile muted, labelled with its length.
+  const splits = run.splits
+    .filter((s) => s.distance_mi >= STUB_SPLIT_MI)
+    .map((s) => ({ ...s, partial: s.distance_mi < FULL_SPLIT_MI, label: s.distance_mi < FULL_SPLIT_MI ? `${s.pace_str} (${fmtNum(s.distance_mi, 2)} mi)` : s.pace_str }))
+  const splitDomain = paceDomain(splits.map((s) => s.pace_sec_mi ?? 0))
   const curveDomain = paceDomain(run.pace_curve.map((p) => p.pace_sec_mi))
   return (
     <>
@@ -94,16 +98,19 @@ function Body({ run, onPatch }: { run: RunDetailT; onPatch: (patch: Partial<RunD
             <h2>Mile splits</h2>
             <p>Pace per mile</p>
           </div>
-          {run.splits.length ? (
-            <div className="chart" style={{ height: Math.max(140, 28 * run.splits.length + 30) }}>
+          {splits.length ? (
+            <div className="chart" style={{ height: Math.max(140, 28 * splits.length + 30) }}>
               <ResponsiveContainer>
-                <BarChart data={run.splits} layout="vertical" margin={{ left: 0, right: 48, top: 4, bottom: 4 }} barCategoryGap={4}>
+                <BarChart data={splits} layout="vertical" margin={{ left: 0, right: splits.some((s) => s.partial) ? 100 : 48, top: 4, bottom: 4 }} barCategoryGap={4}>
                   <CartesianGrid {...gridProps} horizontal={false} vertical />
                   <XAxis type="number" domain={[0, splitDomain[1]]} tickFormatter={fmtPace} {...axisProps} />
                   <YAxis type="category" dataKey="index" width={28} {...axisProps} tickFormatter={(v) => `${v}`} />
                   <Tooltip cursor={{ fill: 'var(--accent-wash)' }} content={(p: RechartsTip) => splitTip(p, run)} />
                   <Bar dataKey="pace_sec_mi" fill={series.blue} radius={[0, 4, 4, 0]} maxBarSize={20}>
-                    <LabelList dataKey="pace_str" position="right" style={{ fill: 'var(--ink-2)', fontSize: 11 }} />
+                    {splits.map((s) => (
+                      <Cell key={s.index} fill={s.partial ? 'var(--seq-250)' : series.blue} fillOpacity={s.partial ? 0.6 : 1} />
+                    ))}
+                    <LabelList dataKey="label" position="right" style={{ fill: 'var(--ink-2)', fontSize: 11 }} />
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>

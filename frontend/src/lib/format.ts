@@ -76,3 +76,8 @@ export function linearTrend(xs: number[], ys: number[]): { slope: number; interc
   const slope = num / den
   return { slope, intercept: my - slope * mx }
 }
+
+/** A split shorter than this is a partial mile: its GPS pace is unreliable (cool-down, stop lag). */
+export const FULL_SPLIT_MI = 0.9
+/** Trailing splits shorter than this are recording artifacts (the watch ran on after you stopped). */
+export const STUB_SPLIT_MI = 0.1

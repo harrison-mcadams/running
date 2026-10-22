@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { CartesianGrid, ComposedChart, Line, ReferenceLine, ResponsiveContainer, Scatter, ScatterChart, Tooltip, XAxis, YAxis, ZAxis } from 'recharts'
 import { api, type Group, type GroupDetail, type GroupMember, type Run } from '../api'
-import { dayNumberToIso, fmtDate, fmtNum, fmtPace, fmtSigned, linearTrend, toDayNumber } from '../lib/format'
+import { dayNumberToIso, fmtDate, fmtNum, fmtPace, fmtSigned, FULL_SPLIT_MI, linearTrend, toDayNumber } from '../lib/format'
 import { axisProps, clickedRunId, gridProps, Legend, paceDomain, paceTicks, series, Tip, type RechartsTip } from '../components/charts'
 import { RouteMap } from '../components/RouteMap'
 
@@ -184,7 +184,7 @@ export function RoutesPage({ runs, onOpen, version }: { runs: Run[] | null; onOp
           <div className="card" style={{ marginTop: 14 }}>
             <div className="card-head">
               <h2>Mile by mile</h2>
-              <p>Selected run against the average of similar runs; faster is up</p>
+              <p>Full miles of the selected run against similar runs; faster is up</p>
             </div>
             <SplitsCompare focus={focusRun} others={others} />
           </div>
@@ -296,12 +296,17 @@ function tip(p: RechartsTip) {
 }
 
 function SplitsCompare({ focus, others }: { focus: GroupMember; others: GroupMember[] }) {
-  if (!focus.splits.length) return <div className="empty">No splits for the selected run.</div>
-  const rows = focus.splits.map((s) => {
-    const peers = others.map((o) => o.splits.find((x) => x.index === s.index)?.pace_sec_mi).filter((v): v is number => v != null && v > 0)
+  // Full miles only: final partial miles have unreliable pace and would distort both lines.
+  const fullMiles = focus.splits.filter((s) => s.distance_mi >= FULL_SPLIT_MI)
+  const tail = focus.splits.filter((s) => s.distance_mi < FULL_SPLIT_MI).reduce((a, s) => a + s.distance_mi, 0)
+  if (!fullMiles.length) return <div className="empty">No full-mile splits for the selected run.</div>
+  const rows = fullMiles.map((s) => {
+    const peers = others
+      .map((o) => o.splits.find((x) => x.index === s.index && x.distance_mi >= FULL_SPLIT_MI)?.pace_sec_mi)
+      .filter((v): v is number => v != null && v > 0)
     const avg = peers.length ? peers.reduce((a, b) => a + b, 0) / peers.length : null
     const best = peers.length ? Math.min(...peers) : null
-    return { mile: s.index, focus: s.pace_sec_mi, avg, best, n: peers.length, partial: s.distance_mi < 0.95 }
+    return { mile: s.index, focus: s.pace_sec_mi, avg, best, n: peers.length, partial: false }
   })
   const all = rows.flatMap((r) => [r.focus ?? 0, r.avg ?? 0, r.best ?? 0]).filter((v) => v > 0)
   const domain = paceDomain(all)
@@ -327,6 +332,7 @@ function SplitsCompare({ focus, others }: { focus: GroupMember; others: GroupMem
         </ResponsiveContainer>
       </div>
       <Legend items={[{ color: series.orange, label: 'Selected run' }, { color: series.blue, label: 'Average of similar runs' }, { color: series.aqua, label: 'Best similar split' }]} />
+      {tail >= 0.05 && <p className="note">The final {fmtNum(tail, 2)} mi is left out: pace over a partial mile is unreliable.</p>}
     </>
   )
 }
