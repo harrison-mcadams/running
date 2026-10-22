@@ -128,7 +128,7 @@ export default function App() {
         ))}
       </nav>
 
-      {detailId && <RunDetailSheet id={detailId} onClose={() => setDetailId(null)} />}
+      {detailId && <RunDetailSheet id={detailId} onClose={() => setDetailId(null)} onChanged={dataChanged} />}
       {showSettings && <SettingsSheet onClose={() => setShowSettings(false)} sync={sync} onSync={startSync} onDataChanged={dataChanged} />}
       <style>{`@keyframes spin { to { transform: rotate(360deg) } } @media (max-width: 480px) { .sync-label { display: none } }`}</style>
     </div>

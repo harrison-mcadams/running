@@ -115,6 +115,20 @@ CREATE TABLE IF NOT EXISTS group_names (
     name TEXT
 );
 
+CREATE TABLE IF NOT EXISTS run_flags (
+    activity_id TEXT PRIMARY KEY,
+    exclude_from_model INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS run_comments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    activity_id TEXT NOT NULL,
+    body TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_comments_activity ON run_comments(activity_id);
+
 CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
     value TEXT

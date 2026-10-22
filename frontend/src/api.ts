@@ -41,6 +41,8 @@ export interface Run {
   start_bearing_deg: number | null
   heading: string | null
   location_inferred: boolean
+  excluded_from_model: boolean
+  n_comments: number
   zones: Zones
   weather: Weather | null
   group_id: number | null
@@ -64,7 +66,14 @@ export interface LatLon {
   alt_m?: number | null
 }
 
+export interface RunComment {
+  id: number
+  body: string
+  created_at: string
+}
+
 export interface RunDetail extends Run {
+  comments: RunComment[]
   splits: Split[]
   hr: { sec: number; bpm: number }[]
   route: LatLon[]
@@ -132,6 +141,7 @@ export interface ModelSummary {
   reason?: string
   variant: 'conditions' | 'effort'
   n_runs: number
+  n_excluded: number
   alpha: number
   r2_in_sample: number
   r2_loo: number
@@ -206,6 +216,10 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
 export const api = {
   runs: () => request<Run[]>('/api/runs'),
   run: (id: string) => request<RunDetail>(`/api/runs/${id}`),
+  setExcluded: (id: string, excluded: boolean) =>
+    request<{ ok: boolean; excluded_from_model: boolean }>(`/api/runs/${id}/exclude`, { method: 'PUT', body: JSON.stringify({ excluded }) }),
+  addComment: (id: string, body: string) => request<RunComment>(`/api/runs/${id}/comments`, { method: 'POST', body: JSON.stringify({ body }) }),
+  deleteComment: (id: string, commentId: number) => request<{ ok: boolean }>(`/api/runs/${id}/comments/${commentId}`, { method: 'DELETE' }),
   groups: () => request<Group[]>('/api/groups'),
   group: (id: number, focus?: string) => request<GroupDetail>(`/api/groups/${id}${focus ? `?focus=${focus}` : ''}`),
   renameGroup: (id: number, name: string) => request<{ ok: boolean }>(`/api/groups/${id}/name`, { method: 'PUT', body: JSON.stringify({ name }) }),

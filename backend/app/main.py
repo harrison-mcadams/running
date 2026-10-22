@@ -59,7 +59,43 @@ def api_run(run_id: str) -> dict:
             "hr": store.get_hr_series(conn, run_id),
             "route": [{"lat": p["lat"], "lon": p["lon"], "alt_m": p["alt_m"]} for p in downsample(route, 600)],
             "pace_curve": store.pace_curve(route),
+            "comments": store.get_comments(conn, run_id),
         }
+
+
+def _require_run(conn, run_id: str) -> None:
+    if not conn.execute("SELECT 1 FROM activities WHERE id = ?", (run_id,)).fetchone():
+        raise HTTPException(404, "run not found")
+
+
+@app.put("/api/runs/{run_id}/exclude")
+def api_run_exclude(run_id: str, body: dict = Body(...)) -> dict:
+    excluded = bool(body.get("excluded"))
+    with db() as conn:
+        _require_run(conn, run_id)
+        store.set_excluded(conn, run_id, excluded)
+    model_service.invalidate()
+    return {"ok": True, "excluded_from_model": excluded}
+
+
+@app.post("/api/runs/{run_id}/comments")
+def api_add_comment(run_id: str, body: dict = Body(...)) -> dict:
+    text = (body.get("body") or "").strip()
+    if not text:
+        raise HTTPException(400, "comment is empty")
+    if len(text) > 4000:
+        raise HTTPException(400, "comment is too long (4000 characters max)")
+    with db() as conn:
+        _require_run(conn, run_id)
+        return store.add_comment(conn, run_id, text)
+
+
+@app.delete("/api/runs/{run_id}/comments/{comment_id}")
+def api_delete_comment(run_id: str, comment_id: int) -> dict:
+    with db() as conn:
+        if not store.delete_comment(conn, run_id, comment_id):
+            raise HTTPException(404, "comment not found")
+    return {"ok": True}
 
 
 # --------------------------------------------------------------------------- route groups

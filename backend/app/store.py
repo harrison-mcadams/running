@@ -108,6 +108,35 @@ def infer_locations(conn: sqlite3.Connection) -> int:
     return n
 
 
+def get_comments(conn: sqlite3.Connection, activity_id: str) -> list[dict]:
+    rows = conn.execute(
+        "SELECT id, body, created_at FROM run_comments WHERE activity_id = ? ORDER BY created_at, id", (activity_id,)
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def add_comment(conn: sqlite3.Connection, activity_id: str, body: str) -> dict:
+    created = _now()
+    cur = conn.execute(
+        "INSERT INTO run_comments (activity_id, body, created_at) VALUES (?, ?, ?)", (activity_id, body, created)
+    )
+    return {"id": cur.lastrowid, "body": body, "created_at": created}
+
+
+def delete_comment(conn: sqlite3.Connection, activity_id: str, comment_id: int) -> bool:
+    cur = conn.execute("DELETE FROM run_comments WHERE id = ? AND activity_id = ?", (comment_id, activity_id))
+    return cur.rowcount > 0
+
+
+def set_excluded(conn: sqlite3.Connection, activity_id: str, excluded: bool) -> None:
+    conn.execute(
+        """INSERT INTO run_flags (activity_id, exclude_from_model, updated_at) VALUES (?, ?, ?)
+           ON CONFLICT(activity_id) DO UPDATE SET exclude_from_model = excluded.exclude_from_model,
+             updated_at = excluded.updated_at""",
+        (activity_id, 1 if excluded else 0, _now()),
+    )
+
+
 def mark_route_failed(conn: sqlite3.Connection, activity_id: str, error: str) -> None:
     conn.execute(
         """INSERT INTO route_meta (activity_id, n_points, fetch_error, fetched_at) VALUES (?, 0, ?, ?)
@@ -188,14 +217,16 @@ def list_runs(conn: sqlite3.Connection, include_hidden: bool = False) -> list[di
                w.lat AS w_lat, w.lon AS w_lon,
                rm.n_points, rm.start_lat, rm.start_lon, rm.elevation_m, rm.elevation_gain_m AS gps_gain_m,
                rm.start_bearing_deg, rm.location_inferred,
-               g.group_id, g.same_direction, gn.name AS group_name,
+               g.group_id, g.same_direction, gn.name AS group_name, COALESCE(f.exclude_from_model, 0) AS excluded,
                (SELECT COUNT(*) FROM hr_samples h WHERE h.activity_id = a.id) AS n_hr,
-               (SELECT COUNT(*) FROM splits s WHERE s.activity_id = a.id) AS n_splits
+               (SELECT COUNT(*) FROM splits s WHERE s.activity_id = a.id) AS n_splits,
+               (SELECT COUNT(*) FROM run_comments c WHERE c.activity_id = a.id) AS n_comments
         FROM activities a
         LEFT JOIN weather w ON w.activity_id = a.id
         LEFT JOIN route_meta rm ON rm.activity_id = a.id
         LEFT JOIN route_groups g ON g.activity_id = a.id
         LEFT JOIN group_names gn ON gn.group_id = g.group_id
+        LEFT JOIN run_flags f ON f.activity_id = a.id
         WHERE a.activity_type = 'RUNNING'
         ORDER BY a.start_time
         """
@@ -298,6 +329,8 @@ def _run_record(r: sqlite3.Row) -> dict | None:
         "group_name": r["group_name"],
         "same_direction": r["same_direction"],
         "source": r["source_device"] or r["source_platform"],
+        "excluded_from_model": bool(r["excluded"]),
+        "n_comments": r["n_comments"],
     }
 
 

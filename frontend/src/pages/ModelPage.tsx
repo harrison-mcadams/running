@@ -63,7 +63,7 @@ export function ModelPage({ version }: { version: number }) {
       <div className="page-head">
         <div>
           <h1>Pace model</h1>
-          <p>A linear model of your pace fitted to {model.n_runs} runs: what each factor costs, what you would run today, and whether you are getting faster once conditions are taken out.</p>
+          <p>A linear model of your pace fitted to {model.n_runs} runs{model.n_excluded ? ` (${model.n_excluded} excluded by you)` : ''}: what each factor costs, what you would run today, and whether you are getting faster once conditions are taken out.</p>
         </div>
         <div className="seg">
           <button className={variant === 'conditions' ? 'active' : ''} onClick={() => setVariant('conditions')}>Conditions only</button>

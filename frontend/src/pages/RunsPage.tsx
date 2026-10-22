@@ -217,6 +217,8 @@ export function RunsPage({ runs, onOpen }: { runs: Run[] | null; onOpen: (id: st
                 <tr key={r.id} className="clickable" onClick={() => onOpen(r.id)}>
                   <td>
                     {fmtDate(r.date, { weekday: 'short', month: 'short', day: 'numeric', year: '2-digit' })} <span className="muted small">{r.time}</span>
+                    {r.n_comments > 0 && <span className="tag" title={`${r.n_comments} note${r.n_comments === 1 ? '' : 's'}`}>✎ {r.n_comments}</span>}
+                    {r.excluded_from_model && <span className="tag" title="Left out of the pace model">not in model</span>}
                   </td>
                   <td className="num">{fmtNum(r.distance_mi, 2)}</td>
                   <td className="num">{r.duration_str ?? '–'}</td>

@@ -4,8 +4,9 @@ import { api, type RunDetail as RunDetailT } from '../api'
 import { fmtDateLong, fmtDuration, fmtNum, fmtPace, fmtTime12 } from '../lib/format'
 import { axisProps, gridProps, paceDomain, paceTicks, series, Tip, type RechartsTip } from './charts'
 import { RouteMap } from './RouteMap'
+import { RunNotes } from './RunNotes'
 
-export function RunDetailSheet({ id, onClose }: { id: string; onClose: () => void }) {
+export function RunDetailSheet({ id, onClose, onChanged }: { id: string; onClose: () => void; onChanged: () => void }) {
   const [run, setRun] = useState<RunDetailT | null>(null)
   const [err, setErr] = useState<string | null>(null)
 
@@ -15,7 +16,10 @@ export function RunDetailSheet({ id, onClose }: { id: string; onClose: () => voi
   }, [id])
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    const onKey = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement | null)?.tagName
+      if (e.key === 'Escape' && tag !== 'TEXTAREA' && tag !== 'INPUT') onClose()
+    }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
@@ -39,13 +43,21 @@ export function RunDetailSheet({ id, onClose }: { id: string; onClose: () => voi
           </button>
         </div>
         {err && <div className="banner error">{err}</div>}
-        {run && <Body run={run} />}
+        {run && (
+          <Body
+            run={run}
+            onPatch={(patch) => {
+              setRun({ ...run, ...patch, n_comments: (patch.comments ?? run.comments).length })
+              onChanged()
+            }}
+          />
+        )}
       </div>
     </div>
   )
 }
 
-function Body({ run }: { run: RunDetailT }) {
+function Body({ run, onPatch }: { run: RunDetailT; onPatch: (patch: Partial<RunDetailT>) => void }) {
   const zones = run.zones
   const zoneTotal = zones.light_sec + zones.moderate_sec + zones.vigorous_sec + zones.peak_sec
   const splitDomain = paceDomain(run.splits.map((s) => s.pace_sec_mi ?? 0))
@@ -61,7 +73,9 @@ function Body({ run }: { run: RunDetailT }) {
         <Stat label="Elev. gain" value={run.elevation_gain_ft != null ? `${run.elevation_gain_ft} ft` : '–'} />
       </div>
 
-      <div className="grid-2">
+      <RunNotes runId={run.id} comments={run.comments} excluded={run.excluded_from_model} onChanged={onPatch} />
+
+      <div className="grid-2" style={{ marginTop: 14 }}>
         <div className="card">
           <div className="card-head">
             <h2>Route</h2>
