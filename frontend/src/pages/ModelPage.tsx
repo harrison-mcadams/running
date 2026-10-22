@@ -87,7 +87,7 @@ export function ModelPage({ version }: { version: number }) {
         <p className="note">
           {variant === 'effort'
             ? 'With heart rate in the model, each coefficient is the effect at a fixed effort level.'
-            : 'Factors whose interval straddles zero are not distinguishable from no effect with this many runs. Altitude and hilliness only sharpen once you have runs that vary in them.'}
+            : 'Factors whose interval straddles zero are not distinguishable from no effect with this many runs. Hilliness only sharpens once your routes vary more in climbing.'}
         </p>
       </div>
 

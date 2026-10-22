@@ -9,7 +9,7 @@ Fitbit), stores them in SQLite, and gives you three views:
    then compare it with the similar runs: direction out, distance tolerance and route
    overlap are all filters.
 3. **Pace model**: a ridge regression of pace on distance, weather, time of day, rest,
-   weekly mileage, hilliness, altitude and training time. It reports effect sizes with
+   weekly mileage, hilliness and training time. It reports effect sizes with
    bootstrap intervals, predicts a pace for a planned run, shows one-factor sensitivity
    curves, and plots a conditions-adjusted fitness trend. A second variant adds average
    heart rate as an effort control.

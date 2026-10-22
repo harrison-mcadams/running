@@ -173,7 +173,6 @@ export interface Conditions {
   humidity: number | null
   days_since_last_run: number | null
   recent_7d_miles: number
-  altitude_kft: number | null
   elev_gain_ft_per_mi: number | null
   distance_mi: number | null
   location: { lat: number; lon: number } | null

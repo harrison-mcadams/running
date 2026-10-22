@@ -27,7 +27,6 @@ FEATURES = [
     ("days_since_last_run", "Rest days", "days", "Days since the previous run (capped at 10).", (0.5, 10.0)),
     ("recent_7d_miles", "7-day mileage", "mi", "Miles run in the 7 days before this run.", (0.0, 40.0)),
     ("elev_gain_ft_per_mi", "Hilliness", "ft/mi", "Elevation gain per mile.", (0.0, 150.0)),
-    ("altitude_kft", "Altitude", "kft", "Terrain elevation at the start, thousands of feet.", (0.0, 8.0)),
     ("weeks", "Training time", "weeks", "Weeks since your first run on record: the fitness trend.", (0.0, 104.0)),
 ]
 EFFORT_FEATURE = ("avg_hr", "Heart rate", "bpm", "Average heart rate: how hard you were working.", (120.0, 190.0))
@@ -56,9 +55,8 @@ def build_frame(runs: list[dict]) -> pd.DataFrame:
         for t in df["local_dt"]
     ]
     df["elev_gain_ft_per_mi"] = df["elevation_gain_ft"] / df["distance_mi"]
-    df["altitude_kft"] = df["altitude_ft"] / 1000.0
     df["weeks"] = (df["local_dt"] - df["local_dt"].min()).dt.total_seconds() / (7 * 86400.0)
-    for col in ("elev_gain_ft_per_mi", "altitude_kft"):
+    for col in ("elev_gain_ft_per_mi",):
         df[col] = df[col].fillna(df[col].median()).fillna(0.0)
     keep = df["temp_f"].notna() & df["pace_sec_mi"].notna()
     if "excluded_from_model" in df:
@@ -92,7 +90,7 @@ class Fitted:
 
 
 # A feature only enters the model when the runs span at least this fraction of its plausible
-# range; otherwise its coefficient would be pure noise (altitude before any trip to altitude).
+# range; otherwise its coefficient would be pure noise (e.g. hilliness when every run is on flat ground).
 MIN_SPAN_FRACTION = 0.03
 
 
