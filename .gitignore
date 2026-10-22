@@ -1,24 +1,27 @@
-# Credentials & Secrets
+# Secrets
 credentials.json
 .env
 
-# Local Fitbit/Google Health Connect Data Caches
-*.csv
-!my_exercises.csv
-!my_exercises_all.csv
-run_heart_rates/
-run_routes/
-
-# Python environment & cache files
+# Database and caches (rebuilt by sync / import)
+data/
 __pycache__/
 *.pyc
 .venv/
-env/
 venv/
+env/
 
-# Editor & System Files
+# Frontend
+frontend/node_modules/
+# frontend/dist is committed on purpose so the Pi needs no Node toolchain.
+
+# Legacy raw caches from the old app (imported once, then redundant)
+legacy/run_heart_rates/
+legacy/run_routes/
+legacy/scratch/
+legacy/my_heart_rate_samples.csv
+
+# Editor & OS
 .vscode/
 .idea/
 .DS_Store
 Thumbs.db
-scratch/
