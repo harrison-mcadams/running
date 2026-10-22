@@ -22,14 +22,16 @@ csv.field_size_limit(10_000_000)
 
 
 def _candidates(name: str) -> list[Path]:
-    return [p for p in (LEGACY_DIR / name, ROOT_DIR / name) if p.exists()]
+    """Root copies first: on a live install they are the newest (the old app kept syncing into
+    them), and import never overwrites, so whichever file is read first wins for shared runs."""
+    return [p for p in (ROOT_DIR / name, LEGACY_DIR / name) if p.exists()]
 
 
 def import_legacy(conn: sqlite3.Connection) -> dict:
     counts = {"activities": 0, "routes": 0, "hr": 0, "weather": 0}
 
-    # Oldest dump first, newest last, so later files win on splits etc. (activities are never overwritten).
-    for csv_name in ("my_exercises_all.csv", "my_exercises.csv"):
+    # Newest dump first: activities are never overwritten, so the first file to contain a run wins.
+    for csv_name in ("my_exercises.csv", "my_exercises_all.csv"):
         for path in _candidates(csv_name):
             with open(path, newline="", encoding="utf-8") as fh:
                 for rec in csv.DictReader(fh):
