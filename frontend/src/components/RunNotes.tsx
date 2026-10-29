@@ -7,13 +7,22 @@ export function RunNotes({
   comments,
   excluded,
   hidden,
+  fail,
   onChanged,
 }: {
   runId: string
   comments: RunComment[]
   excluded: boolean
   hidden: boolean
-  onChanged: (patch: { comments?: RunComment[]; excluded_from_model?: boolean; hidden?: boolean }) => void
+  fail: { is_fail: boolean; fail_source: 'auto' | 'manual' | null; fail_auto: boolean }
+  onChanged: (patch: {
+    comments?: RunComment[]
+    excluded_from_model?: boolean
+    hidden?: boolean
+    is_fail?: boolean
+    fail_source?: 'auto' | 'manual' | null
+    fail_auto?: boolean
+  }) => void
 }) {
   const [draft, setDraft] = useState('')
   const [busy, setBusy] = useState(false)
@@ -51,6 +60,14 @@ export function RunNotes({
       onChanged({ excluded_from_model: r.excluded_from_model })
     })
 
+  // Setting the value that matches the automatic rule clears the override, so later rule
+  // changes (e.g. the distance threshold) still apply to this run.
+  const setFail = (want: boolean) =>
+    act(async () => {
+      const r = await api.setFail(runId, want === fail.fail_auto ? null : want)
+      onChanged({ is_fail: r.is_fail, fail_source: r.fail_source, fail_auto: r.fail_auto })
+    })
+
   const toggleHidden = () =>
     act(async () => {
       if (!hidden && !window.confirm('Hide this run everywhere? You can bring it back from Settings → Hidden runs.')) return
@@ -72,7 +89,16 @@ export function RunNotes({
           This run is hidden from every view. <button className="link" onClick={toggleHidden} disabled={busy}>Unhide</button>
         </div>
       )}
-      {excluded && !hidden && <div className="banner">This run is left out of the pace model. It still shows in your runs and routes.</div>}
+      {fail.is_fail && !hidden && (
+        <div className="banner fail">
+          <b>FAIL.</b> {fail.fail_source === 'manual' ? 'You marked this run as a fail.' : 'Counted automatically: short and slower than your usual pace.'} Fails are left off the
+          charts by default and out of the pace model.{' '}
+          <button className="link" onClick={() => setFail(false)} disabled={busy}>
+            Not a fail
+          </button>
+        </div>
+      )}
+      {excluded && !hidden && !fail.is_fail && <div className="banner">This run is left out of the pace model. It still shows in your runs and routes.</div>}
       {err && <div className="banner error">{err}</div>}
       {comments.length > 0 ? (
         <ul className="comments">
@@ -109,7 +135,12 @@ export function RunNotes({
         </button>
       </div>
       {!hidden && (
-        <div style={{ marginTop: 10, textAlign: 'right' }}>
+        <div className="notes-actions">
+          {!fail.is_fail && (
+            <button className="link" onClick={() => setFail(true)} disabled={busy} title="A cut-short, struggling run: off the charts by default and out of the model">
+              Mark as a fail
+            </button>
+          )}
           <button className="link" onClick={toggleHidden} disabled={busy} title="Remove this run from the runs list, totals, charts, routes and the model">
             Hide this run everywhere
           </button>

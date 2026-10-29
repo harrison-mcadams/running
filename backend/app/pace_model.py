@@ -61,6 +61,8 @@ def build_frame(runs: list[dict]) -> pd.DataFrame:
     keep = df["temp_f"].notna() & df["pace_sec_mi"].notna()
     if "excluded_from_model" in df:
         keep &= ~df["excluded_from_model"].astype(bool)
+    if "is_fail" in df:
+        keep &= ~df["is_fail"].astype(bool)
     df = df[keep].reset_index(drop=True)
     return df
 
@@ -162,6 +164,7 @@ class ModelService:
         self._cache: dict[str, Fitted | None] = {}
         self._frame: pd.DataFrame | None = None
         self._n_excluded = 0
+        self._n_fails = 0
 
     def invalidate(self) -> None:
         with self._lock:
@@ -174,7 +177,8 @@ class ModelService:
                 if self._frame is None:
                     with db() as conn:
                         runs = store.list_runs(conn)
-                    self._n_excluded = sum(1 for r in runs if r.get("excluded_from_model"))
+                    self._n_excluded = sum(1 for r in runs if r.get("excluded_from_model") and not r.get("is_fail"))
+                    self._n_fails = sum(1 for r in runs if r.get("is_fail"))
                     self._frame = build_frame(runs)
                 self._cache[variant] = fit(self._frame, variant) if not self._frame.empty else None
             return self._cache[variant]
@@ -244,6 +248,7 @@ class ModelService:
             "variant": variant,
             "n_runs": int(len(f.df)),
             "n_excluded": self._n_excluded,
+            "n_fails": self._n_fails,
             "alpha": f.alpha,
             "r2_in_sample": round(float(r2_in), 3),
             "r2_loo": round(float(r2_loo), 3),

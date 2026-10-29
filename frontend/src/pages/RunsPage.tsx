@@ -20,6 +20,7 @@ export function RunsPage({ runs, onOpen }: { runs: Run[] | null; onOpen: (id: st
   const [minDist, setMinDist] = useState('')
   const [maxDist, setMaxDist] = useState('')
   const [group, setGroup] = useState('')
+  const [showFails, setShowFails] = useState(false)
   const [sort, setSort] = useState<{ key: SortKey; asc: boolean }>({ key: 'date', asc: false })
 
   const groups = useMemo(() => {
@@ -42,9 +43,12 @@ export function RunsPage({ runs, onOpen }: { runs: Run[] | null; onOpen: (id: st
       if (minDist && r.distance_mi < Number(minDist)) return false
       if (maxDist && r.distance_mi > Number(maxDist)) return false
       if (group && String(r.group_id) !== group) return false
+      if (!showFails && r.is_fail) return false
       return true
     })
-  }, [runs, preset, start, end, minDist, maxDist, group])
+  }, [runs, preset, start, end, minDist, maxDist, group, showFails])
+
+  const nFails = useMemo(() => (runs ?? []).filter((r) => r.is_fail).length, [runs])
 
   const sorted = useMemo(() => {
     const val = (r: Run): number | string => {
@@ -90,6 +94,7 @@ export function RunsPage({ runs, onOpen }: { runs: Run[] | null; onOpen: (id: st
           <h1>Runs</h1>
           <p>
             {runs.length} runs on record, {fmtDate(runs[0].date, { month: 'short', year: 'numeric' })} to {fmtDate(runs[runs.length - 1].date, { month: 'short', year: 'numeric' })}
+            {nFails > 0 && (showFails ? `, including ${nFails} fail${nFails === 1 ? '' : 's'}` : `, ${nFails} fail${nFails === 1 ? '' : 's'} not shown`)}
           </p>
         </div>
       </div>
@@ -136,6 +141,12 @@ export function RunsPage({ runs, onOpen }: { runs: Run[] | null; onOpen: (id: st
                 </option>
               ))}
             </select>
+          </label>
+        )}
+        {nFails > 0 && (
+          <label className="switch" title="FAILs are cut-short, struggling runs: under the distance set in Settings and slower than your usual pace, or marked by you.">
+            <input type="checkbox" checked={showFails} onChange={(e) => setShowFails(e.target.checked)} />
+            <span>Show fails ({nFails})</span>
           </label>
         )}
         {(preset !== 'all' || start || end || minDist || maxDist || group) && (
@@ -218,7 +229,8 @@ export function RunsPage({ runs, onOpen }: { runs: Run[] | null; onOpen: (id: st
                   <td>
                     {fmtDate(r.date, { weekday: 'short', month: 'short', day: 'numeric', year: '2-digit' })} <span className="muted small">{r.time}</span>
                     {r.n_comments > 0 && <span className="tag" title={`${r.n_comments} note${r.n_comments === 1 ? '' : 's'}`}>✎ {r.n_comments}</span>}
-                    {r.excluded_from_model && <span className="tag" title="Left out of the pace model">not in model</span>}
+                    {r.is_fail && <span className="tag fail" title={r.fail_source === 'manual' ? 'Marked as a fail by you' : 'Automatically: short and slower than your usual pace'}>FAIL</span>}
+                    {r.excluded_from_model && !r.is_fail && <span className="tag" title="Left out of the pace model">not in model</span>}
                   </td>
                   <td className="num">{fmtNum(r.distance_mi, 2)}</td>
                   <td className="num">{r.duration_str ?? '–'}</td>

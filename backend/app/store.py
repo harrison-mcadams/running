@@ -128,6 +128,15 @@ def delete_comment(conn: sqlite3.Connection, activity_id: str, comment_id: int) 
     return cur.rowcount > 0
 
 
+def set_fail_override(conn: sqlite3.Connection, activity_id: str, value: bool | None) -> None:
+    """True/False forces fail / not-fail; None returns the run to the automatic rule."""
+    conn.execute(
+        """INSERT INTO run_flags (activity_id, fail_override, updated_at) VALUES (?, ?, ?)
+           ON CONFLICT(activity_id) DO UPDATE SET fail_override = excluded.fail_override, updated_at = excluded.updated_at""",
+        (activity_id, None if value is None else int(bool(value)), _now()),
+    )
+
+
 def set_hidden(conn: sqlite3.Connection, activity_id: str, hidden: bool) -> None:
     conn.execute(
         """INSERT INTO run_flags (activity_id, hidden, updated_at) VALUES (?, ?, ?)
@@ -230,7 +239,7 @@ def list_runs(conn: sqlite3.Connection, include_hidden: bool = False) -> list[di
                w.lat AS w_lat, w.lon AS w_lon,
                rm.n_points, rm.start_lat, rm.start_lon, rm.elevation_m, rm.elevation_gain_m AS gps_gain_m,
                rm.start_bearing_deg, rm.location_inferred,
-               g.group_id, g.same_direction, gn.name AS group_name, COALESCE(f.exclude_from_model, 0) AS excluded, COALESCE(f.hidden, 0) AS hidden_flag,
+               g.group_id, g.same_direction, gn.name AS group_name, COALESCE(f.exclude_from_model, 0) AS excluded, COALESCE(f.hidden, 0) AS hidden_flag, f.fail_override,
                (SELECT COUNT(*) FROM hr_samples h WHERE h.activity_id = a.id) AS n_hr,
                (SELECT COUNT(*) FROM splits s WHERE s.activity_id = a.id) AS n_splits,
                (SELECT COUNT(*) FROM run_comments c WHERE c.activity_id = a.id) AS n_comments
@@ -244,27 +253,48 @@ def list_runs(conn: sqlite3.Connection, include_hidden: bool = False) -> list[di
         ORDER BY a.start_time
         """
     ).fetchall()
-    out = []
+    every = []
     for r in rows:
         rec = _run_record(r)
         if rec is None:
             continue
-        if not include_hidden:
-            if rec["hidden"]:
-                continue
-            if flt["hidden_before"] and rec["date"] < flt["hidden_before"]:
-                continue
-            if rec["distance_mi"] < flt["min_distance_mi"]:
-                continue
-            if rec["pace_sec_mi"] is None or rec["pace_sec_mi"] > flt["max_pace_sec_mi"]:
-                continue
-        out.append(rec)
+        rec["_visible"] = not (
+            rec["hidden"]
+            or (flt["hidden_before"] and rec["date"] < flt["hidden_before"])
+            or rec["distance_mi"] < flt["min_distance_mi"]
+            or rec["pace_sec_mi"] is None
+            or rec["pace_sec_mi"] > flt["max_pace_sec_mi"]
+        )
+        every.append(rec)
+    # Classify against visible runs only, so a run's category doesn't depend on how it was listed.
+    classify_fails(every, float(get_setting(conn, "fail_max_distance_mi")))
+    out = [rec for rec in every if include_hidden or rec["_visible"]]
+    for rec in every:
+        del rec["_visible"]
     # Fill in automatic route names where no custom name is set.
     auto = auto_group_names(out)
     for rec in out:
         if rec["group_id"] is not None and not rec["group_name"]:
             rec["group_name"] = auto.get(rec["group_id"])
     return out
+
+
+def classify_fails(runs: list[dict], max_distance_mi: float) -> None:
+    """Mark FAIL runs in place: a run is a fail when the user says so, or automatically when it
+    is shorter than max_distance_mi and slower than the median pace of the other runs."""
+    paces = sorted(r["pace_sec_mi"] for r in runs if r["pace_sec_mi"] and r.get("_visible", not r["hidden"]))
+    median = paces[len(paces) // 2] if paces else None
+    for r in runs:
+        auto = bool(
+            median is not None
+            and r["pace_sec_mi"] is not None
+            and r["distance_mi"] < max_distance_mi
+            and r["pace_sec_mi"] > median
+        )
+        override = r.pop("fail_override")
+        r["is_fail"] = bool(override) if override is not None else auto
+        r["fail_source"] = "manual" if override is not None else ("auto" if auto else None)
+        r["fail_auto"] = auto
 
 
 def auto_group_names(runs: list[dict]) -> dict[int, str]:
@@ -346,6 +376,7 @@ def _run_record(r: sqlite3.Row) -> dict | None:
         "source": r["source_device"] or r["source_platform"],
         "excluded_from_model": bool(r["excluded"]),
         "hidden": bool(r["hidden_flag"]),
+        "fail_override": r["fail_override"],
         "n_comments": r["n_comments"],
     }
 

@@ -140,6 +140,10 @@ export function SettingsSheet({ onClose, sync, onSync, onDataChanged }: { onClos
                 <span>Same-route coverage (0–1)</span>
                 <input type="number" step="0.05" min="0" max="1" value={settings.group_coverage} onChange={(e) => setSettings({ ...settings, group_coverage: e.target.value })} />
               </label>
+              <label className="field">
+                <span>FAIL if shorter than (mi) and slower than usual</span>
+                <input type="number" step="0.5" min="0" value={settings.fail_max_distance_mi} onChange={(e) => setSettings({ ...settings, fail_max_distance_mi: e.target.value })} />
+              </label>
             </div>
             <div style={{ marginTop: 12 }}>
               <button

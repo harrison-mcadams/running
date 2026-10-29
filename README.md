@@ -95,3 +95,4 @@ WantedBy=multi-user.target
 | max_pace_sec_mi | 900 | slower activities are hidden |
 | match_radius_m | 60 | two tracks "share" a point when within this distance |
 | group_coverage | 0.8 | the shorter run must be this covered by the longer one to share a route |
+| fail_max_distance_mi | 3.0 | runs shorter than this and slower than your median pace count as FAILs |

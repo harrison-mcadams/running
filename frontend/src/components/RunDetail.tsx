@@ -82,7 +82,7 @@ function Body({ run, onPatch }: { run: RunDetailT; onPatch: (patch: Partial<RunD
         <Stat label="Elev. gain" value={run.elevation_gain_ft != null ? `${run.elevation_gain_ft} ft` : '–'} />
       </div>
 
-      <RunNotes runId={run.id} comments={run.comments} excluded={run.excluded_from_model} hidden={run.hidden} onChanged={onPatch} />
+      <RunNotes runId={run.id} comments={run.comments} excluded={run.excluded_from_model} hidden={run.hidden} fail={{ is_fail: run.is_fail, fail_source: run.fail_source, fail_auto: run.fail_auto }} onChanged={onPatch} />
 
       <div className="grid-2" style={{ marginTop: 14 }}>
         <div className="card">

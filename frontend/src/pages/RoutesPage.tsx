@@ -14,6 +14,7 @@ export function RoutesPage({ runs, onOpen, version }: { runs: Run[] | null; onOp
   const [headings, setHeadings] = useState<Set<string> | null>(null)
   const [distTol, setDistTol] = useState(1.0)
   const [minOverlap, setMinOverlap] = useState(0)
+  const [includeFails, setIncludeFails] = useState(false)
   const [renaming, setRenaming] = useState(false)
   const [nameDraft, setNameDraft] = useState('')
 
@@ -44,9 +45,10 @@ export function RoutesPage({ runs, onOpen, version }: { runs: Run[] | null; onOp
       if (headings && m.heading && !headings.has(m.heading)) return false
       if (Math.abs(m.distance_mi - focusRun.distance_mi) > distTol) return false
       if (m.overlap < minOverlap / 100) return false
+      if (!includeFails && m.is_fail) return false
       return true
     })
-  }, [detail, focusRun, headings, distTol, minOverlap])
+  }, [detail, focusRun, headings, distTol, minOverlap, includeFails])
 
   const others = included.filter((m) => m.id !== focusRun?.id)
   const avgPace = others.length ? others.reduce((a, m) => a + (m.pace_sec_mi ?? 0), 0) / others.length : null
@@ -147,6 +149,12 @@ export function RoutesPage({ runs, onOpen, version }: { runs: Run[] | null; onOp
                   <input type="range" min="0" max="100" step="5" value={minOverlap} onChange={(e) => setMinOverlap(Number(e.target.value))} />
                 </div>
               </div>
+              {detail.members.some((m) => m.is_fail && m.id !== focusRun.id) && (
+                <label className="switch">
+                  <input type="checkbox" checked={includeFails} onChange={(e) => setIncludeFails(e.target.checked)} />
+                  <span>Include fails ({detail.members.filter((m) => m.is_fail && m.id !== focusRun.id).length})</span>
+                </label>
+              )}
             </div>
 
             <div className="tiles">
@@ -215,7 +223,10 @@ export function RoutesPage({ runs, onOpen, version }: { runs: Run[] | null; onOp
                     const d = m.pace_sec_mi && focusRun.pace_sec_mi ? m.pace_sec_mi - focusRun.pace_sec_mi : null
                     return (
                       <tr key={m.id} className={`clickable${m.id === focusRun.id ? ' focus' : ''}`} style={inc ? undefined : { opacity: 0.45 }} onClick={() => setFocus(m.id)}>
-                        <td>{fmtDate(m.date, { weekday: 'short', month: 'short', day: 'numeric', year: '2-digit' })}</td>
+                        <td>
+                          {fmtDate(m.date, { weekday: 'short', month: 'short', day: 'numeric', year: '2-digit' })}
+                          {m.is_fail && <span className="tag fail">FAIL</span>}
+                        </td>
                         <td className="num">{fmtNum(m.distance_mi, 2)}</td>
                         <td className="num">{m.pace_str}</td>
                         <td className={`num ${d == null || m.id === focusRun.id ? 'muted' : d < 0 ? 'delta-good' : 'delta-bad'}`}>{m.id === focusRun.id ? 'selected' : d == null ? '–' : `${fmtSigned(d)} s`}</td>

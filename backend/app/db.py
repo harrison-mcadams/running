@@ -119,6 +119,7 @@ CREATE TABLE IF NOT EXISTS run_flags (
     activity_id TEXT PRIMARY KEY,
     exclude_from_model INTEGER NOT NULL DEFAULT 0,
     hidden INTEGER NOT NULL DEFAULT 0,
+    fail_override INTEGER,     -- NULL: use the automatic rule; 1: fail; 0: not a fail
     updated_at TEXT
 );
 
@@ -161,6 +162,7 @@ MIGRATIONS = [
     ("route_meta", "start_bearing_deg", "ALTER TABLE route_meta ADD COLUMN start_bearing_deg REAL"),
     ("route_meta", "location_inferred", "ALTER TABLE route_meta ADD COLUMN location_inferred INTEGER"),
     ("run_flags", "hidden", "ALTER TABLE run_flags ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0"),
+    ("run_flags", "fail_override", "ALTER TABLE run_flags ADD COLUMN fail_override INTEGER"),
 ]
 
 

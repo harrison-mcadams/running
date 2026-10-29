@@ -1090,3 +1090,25 @@ button.link:hover {
   font-size: 11px;
   vertical-align: 1px;
 }
+
+/* ---------------------------------------------------------------- fails */
+
+.tag.fail {
+  background: rgba(208, 59, 59, 0.14);
+  color: var(--critical);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.banner.fail {
+  background: rgba(208, 59, 59, 0.1);
+}
+
+.notes-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin-top: 10px;
+}

@@ -86,6 +86,20 @@ def api_run_hidden(run_id: str, body: dict = Body(...)) -> dict:
     return {"ok": True, "hidden": hidden}
 
 
+@app.put("/api/runs/{run_id}/fail")
+def api_run_fail(run_id: str, body: dict = Body(...)) -> dict:
+    """{"fail": true|false} forces the category; {"fail": null} returns to the automatic rule."""
+    value = body.get("fail")
+    if value is not None and not isinstance(value, bool):
+        raise HTTPException(400, "fail must be true, false or null")
+    with db() as conn:
+        _require_run(conn, run_id)
+        store.set_fail_override(conn, run_id, value)
+        run = next(r for r in store.list_runs(conn, include_hidden=True) if r["id"] == run_id)
+    model_service.invalidate()
+    return {"ok": True, "is_fail": run["is_fail"], "fail_source": run["fail_source"], "fail_auto": run["fail_auto"]}
+
+
 @app.put("/api/runs/{run_id}/exclude")
 def api_run_exclude(run_id: str, body: dict = Body(...)) -> dict:
     excluded = bool(body.get("excluded"))
@@ -333,7 +347,7 @@ def _callback_page(ok: bool, msg: str) -> str:
 
 # --------------------------------------------------------------------------- settings
 
-SETTING_KEYS = ["hidden_before", "sync_from", "min_distance_mi", "max_pace_sec_mi", "match_radius_m", "group_coverage"]
+SETTING_KEYS = ["hidden_before", "sync_from", "min_distance_mi", "max_pace_sec_mi", "match_radius_m", "group_coverage", "fail_max_distance_mi"]
 
 
 @app.get("/api/settings")

@@ -43,6 +43,9 @@ export interface Run {
   location_inferred: boolean
   excluded_from_model: boolean
   hidden: boolean
+  is_fail: boolean
+  fail_source: 'auto' | 'manual' | null
+  fail_auto: boolean
   n_comments: number
   zones: Zones
   weather: Weather | null
@@ -143,6 +146,7 @@ export interface ModelSummary {
   variant: 'conditions' | 'effort'
   n_runs: number
   n_excluded: number
+  n_fails: number
   alpha: number
   r2_in_sample: number
   r2_loo: number
@@ -216,6 +220,11 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
 export const api = {
   runs: () => request<Run[]>('/api/runs'),
   run: (id: string) => request<RunDetail>(`/api/runs/${id}`),
+  setFail: (id: string, fail: boolean | null) =>
+    request<{ ok: boolean; is_fail: boolean; fail_source: 'auto' | 'manual' | null; fail_auto: boolean }>(`/api/runs/${id}/fail`, {
+      method: 'PUT',
+      body: JSON.stringify({ fail }),
+    }),
   setHidden: (id: string, hidden: boolean) =>
     request<{ ok: boolean; hidden: boolean }>(`/api/runs/${id}/hidden`, { method: 'PUT', body: JSON.stringify({ hidden }) }),
   hiddenRuns: () => request<Run[]>('/api/runs/hidden'),

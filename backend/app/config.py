@@ -30,6 +30,8 @@ DEFAULT_SETTINGS = {
     # Route matching.
     "match_radius_m": "60",
     "group_coverage": "0.8",
+    # A run shorter than this AND slower than your median pace is a FAIL (cut short, struggling).
+    "fail_max_distance_mi": "3.0",
 }
 
 METERS_PER_MILE = 1609.344
