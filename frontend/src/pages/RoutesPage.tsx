@@ -4,6 +4,7 @@ import { api, type Group, type GroupDetail, type GroupMember, type Run } from '.
 import { dayNumberToIso, fmtDate, fmtNum, fmtPace, fmtSigned, FULL_SPLIT_MI, linearTrend, toDayNumber } from '../lib/format'
 import { axisProps, clickedRunId, gridProps, Legend, paceDomain, paceTicks, series, Tip, type RechartsTip } from '../components/charts'
 import { RouteMap } from '../components/RouteMap'
+import { PaceAlongRoute } from '../components/PaceAlongRoute'
 
 export function RoutesPage({ runs, onOpen, version }: { runs: Run[] | null; onOpen: (id: string) => void; version: number }) {
   const [groups, setGroups] = useState<Group[] | null>(null)
@@ -195,6 +196,14 @@ export function RoutesPage({ runs, onOpen, version }: { runs: Run[] | null; onOp
               <p>Full miles of the selected run against similar runs; faster is up</p>
             </div>
             <SplitsCompare focus={focusRun} others={others} />
+          </div>
+
+          <div className="card" style={{ marginTop: 14 }}>
+            <div className="card-head">
+              <h2>Pace along the route</h2>
+              <p>Continuous pace by distance from the start; faster is up</p>
+            </div>
+            <PaceAlongRoute groupId={group.group_id} focus={focusRun} others={others} version={version} />
           </div>
 
           <div className="card" style={{ marginTop: 14 }}>

@@ -423,6 +423,49 @@ def get_route(conn: sqlite3.Connection, activity_id: str) -> list[dict]:
     return [dict(r) for r in rows]
 
 
+_PROFILE_CACHE: dict[tuple[str, int], list[list[float]]] = {}
+
+
+def pace_profile(
+    activity_id: str,
+    points: list[dict],
+    step_mi: float = 0.05,
+    half_window_mi: float = 0.1,
+    stopped_mps: float = 1.0,
+) -> list[list[float]]:
+    """Pace (sec/mi) against distance (mi) on a fixed grid, so different runs line up point for
+    point. Pace at d is moving time across [d - w, d + w] divided by 2w; time spent stopped
+    (moving slower than `stopped_mps`, e.g. waiting at a light) is left out, so pauses don't
+    show as spikes. The first and last half-window are dropped because the window would run
+    off the end of the track. Cached per run: routes never change once stored."""
+    key = (activity_id, len(points))
+    if key in _PROFILE_CACHE:
+        return _PROFILE_CACHE[key]
+    import numpy as np
+
+    pts = [(p["t_sec"], p["dist_m"]) for p in points if p.get("dist_m") is not None and p.get("t_sec") is not None]
+    out: list[list[float]] = []
+    if len(pts) >= 10:
+        t = np.array([p[0] for p in pts], dtype=float)
+        d = np.maximum.accumulate(np.array([p[1] for p in pts], dtype=float))
+        dt = np.diff(t)
+        dd = np.diff(d)
+        moving = (dt > 0) & (dd / np.where(dt > 0, dt, 1.0) >= stopped_mps)
+        moving_t = np.concatenate([[0.0], np.cumsum(np.where(moving, dt, 0.0))])
+        # Distance must strictly increase to interpolate time as a function of distance.
+        keep = np.concatenate([[True], np.diff(d) > 0])
+        d_mi, mt = d[keep] / METERS_PER_MILE, moving_t[keep]
+        total = float(d_mi[-1])
+        grid = np.arange(half_window_mi, total - half_window_mi + 1e-9, step_mi)
+        if len(grid):
+            t_hi = np.interp(grid + half_window_mi, d_mi, mt)
+            t_lo = np.interp(grid - half_window_mi, d_mi, mt)
+            pace = (t_hi - t_lo) / (2 * half_window_mi)
+            out = [[round(float(x), 2), int(min(max(p, 180.0), 1200.0))] for x, p in zip(grid, pace) if p > 0]
+    _PROFILE_CACHE[key] = out
+    return out
+
+
 def pace_curve(points: list[dict], window_sec: float = 60.0, every_sec: float = 15.0) -> list[dict]:
     """Rolling pace (sec/mi) along the run from the TCX distance stream."""
     pts = [(p["t_sec"], p["dist_m"]) for p in points if p.get("dist_m") is not None]

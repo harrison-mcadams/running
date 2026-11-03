@@ -185,6 +185,17 @@ def api_group_name(group_id: int, body: dict = Body(...)) -> dict:
     return {"ok": True}
 
 
+@app.get("/api/groups/{group_id}/profiles")
+def api_group_profiles(group_id: int) -> dict:
+    """Continuous pace-vs-distance profile for every run in a route group, on a shared 0.05 mi grid."""
+    with db() as conn:
+        members = [r for r in store.list_runs(conn) if r["group_id"] == group_id]
+        if not members:
+            raise HTTPException(404, "group not found")
+        profiles = {m["id"]: store.pace_profile(m["id"], store.get_route(conn, m["id"])) for m in members}
+    return {"step_mi": 0.05, "half_window_mi": 0.1, "profiles": profiles}
+
+
 @app.get("/api/groups/{group_id}")
 def api_group_detail(group_id: int, focus: str | None = None) -> dict:
     """Members of a route group with their mile splits and overlap with the focus run."""
