@@ -186,14 +186,30 @@ def api_group_name(group_id: int, body: dict = Body(...)) -> dict:
 
 
 @app.get("/api/groups/{group_id}/profiles")
-def api_group_profiles(group_id: int) -> dict:
-    """Continuous pace-vs-distance profile for every run in a route group, on a shared 0.05 mi grid."""
+def api_group_profiles(group_id: int, focus: str | None = None, align: str = "map") -> dict:
+    """Continuous pace profile for every run in a route group, on a shared 0.05 mi grid.
+
+    align=distance: x is each run's own distance from its start.
+    align=map: x is the position along the focus run's track that each run was at; stretches a
+    run didn't share with the focus run (detours, a turnaround further out) are left out."""
+    if align not in ("map", "distance"):
+        raise HTTPException(400, "align must be map or distance")
+    from . import align as aligner
+
     with db() as conn:
         members = [r for r in store.list_runs(conn) if r["group_id"] == group_id]
         if not members:
             raise HTTPException(404, "group not found")
-        profiles = {m["id"]: store.pace_profile(m["id"], store.get_route(conn, m["id"])) for m in members}
-    return {"step_mi": 0.05, "half_window_mi": 0.1, "profiles": profiles}
+        routes = {m["id"]: store.get_route(conn, m["id"]) for m in members}
+        radius = float(get_setting(conn, "match_radius_m"))
+    focus_id = focus if focus in routes else members[-1]["id"]
+    profiles = {}
+    for rid, pts in routes.items():
+        if align == "distance" or rid == focus_id:
+            profiles[rid] = store.pace_profile(rid, pts)
+        else:
+            profiles[rid] = aligner.aligned_profile(focus_id, routes[focus_id], rid, pts, radius_m=radius)
+    return {"step_mi": 0.05, "half_window_mi": 0.1, "align": align, "focus_id": focus_id, "profiles": profiles}
 
 
 @app.get("/api/groups/{group_id}")

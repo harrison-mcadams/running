@@ -17,19 +17,23 @@ interface Row {
 /** Continuous pace vs distance: the selected run, the average of the similar runs at each point,
  *  and each similar run as a faint line. Profiles come from the server on a shared 0.05 mi grid. */
 export function PaceAlongRoute({ groupId, focus, others, version }: { groupId: number; focus: GroupMember; others: GroupMember[]; version: number }) {
+  const [mode, setMode] = useState<'map' | 'distance'>('map')
   const [profiles, setProfiles] = useState<Profiles | null>(null)
+  const [loading, setLoading] = useState(false)
   const [err, setErr] = useState<string | null>(null)
 
   useEffect(() => {
     let live = true
+    setLoading(true)
     api
-      .groupProfiles(groupId)
+      .groupProfiles(groupId, focus.id, mode)
       .then((r) => live && setProfiles(r.profiles))
       .catch((e) => live && setErr(String(e)))
+      .finally(() => live && setLoading(false))
     return () => {
       live = false
     }
-  }, [groupId, version])
+  }, [groupId, focus.id, mode, version])
 
   const rows = useMemo(() => {
     if (!profiles) return []
@@ -59,19 +63,43 @@ export function PaceAlongRoute({ groupId, focus, others, version }: { groupId: n
 
   if (err) return <div className="banner error">{err}</div>
   if (!profiles) return <div className="empty">Loading pace profiles…</div>
+  if (!profiles[focus.id] && loading) return <div className="empty">Loading pace profiles…</div>
   if (!profiles[focus.id]?.length) return <div className="empty">No GPS distance stream for the selected run.</div>
 
   // Scale to the selected run and the average; individual runs may spike off-chart.
   const domain = paceDomain(rows.flatMap((r) => [r.focus, r.avg]).filter((v): v is number => v != null))
   const xMax = Math.ceil(Math.max(...rows.map((r) => r.x)) * 2) / 2
 
+  const modeSwitch = (
+    <div className="field row" style={{ marginBottom: 8, flexWrap: 'wrap' }}>
+      <span className="small muted">Line runs up by</span>
+      <div className="seg">
+        <button className={mode === 'map' ? 'active' : ''} onClick={() => setMode('map')} title="Match every run to the same place on the selected run's track">
+          Place on the map
+        </button>
+        <button className={mode === 'distance' ? 'active' : ''} onClick={() => setMode('distance')} title="Plot each run against its own distance from its start">
+          Distance from start
+        </button>
+      </div>
+    </div>
+  )
+
   return (
-    <>
+    <div className={loading ? 'loading' : ''}>
+      {modeSwitch}
       <div className="chart tall">
         <ResponsiveContainer>
           <LineChart data={rows} margin={{ left: 0, right: 12, top: 8, bottom: 0 }}>
             <CartesianGrid {...gridProps} />
-            <XAxis dataKey="x" type="number" domain={[0, xMax]} tickFormatter={(v) => `${v} mi`} {...axisProps} />
+            <XAxis
+              dataKey="x"
+              type="number"
+              domain={[0, xMax]}
+              tickFormatter={(v) => `${v} mi`}
+              label={{ value: mode === 'map' ? 'position along the selected run' : 'distance from each run’s start', position: 'insideBottomRight', offset: -2, fill: 'var(--ink-3)', fontSize: 11 }}
+              height={36}
+              {...axisProps}
+            />
             <YAxis domain={domain} ticks={paceTicks(domain)} reversed allowDataOverflow tickFormatter={fmtPace} width={44} {...axisProps} />
             <Tooltip
               cursor={{ stroke: 'var(--axis)' }}
@@ -105,7 +133,12 @@ export function PaceAlongRoute({ groupId, focus, others, version }: { groupId: n
           { color: 'color-mix(in srgb, var(--series-1) 40%, transparent)', label: 'Each similar run' },
         ]}
       />
-      <p className="note">Pace is smoothed over 0.2 mi and leaves out time spent stopped. Runs line up by distance from the start, so pick one direction out for a like-for-like comparison.</p>
-    </>
+      <p className="note">
+        {mode === 'map'
+          ? 'Each run is matched to the same place on the selected run’s track, moving forward only, so on an out-and-back the way out lines up with the way out and the way back with the way back. Stretches a run didn’t share, like a detour or a turnaround further out, are left blank, and the average there uses only the runs that were on that stretch.'
+          : 'Each run is plotted against its own distance from its start, so a late GPS start or a different start point shifts it along the route.'}{' '}
+        Pace is smoothed over 0.2 mi and leaves out time spent stopped.
+      </p>
+    </div>
   )
 }

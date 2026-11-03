@@ -233,7 +233,10 @@ export const api = {
   addComment: (id: string, body: string) => request<RunComment>(`/api/runs/${id}/comments`, { method: 'POST', body: JSON.stringify({ body }) }),
   deleteComment: (id: string, commentId: number) => request<{ ok: boolean }>(`/api/runs/${id}/comments/${commentId}`, { method: 'DELETE' }),
   groups: () => request<Group[]>('/api/groups'),
-  groupProfiles: (id: number) => request<{ step_mi: number; half_window_mi: number; profiles: Record<string, [number, number][]> }>(`/api/groups/${id}/profiles`),
+  groupProfiles: (id: number, focus: string, align: 'map' | 'distance') =>
+    request<{ step_mi: number; half_window_mi: number; align: string; focus_id: string; profiles: Record<string, [number, number][]> }>(
+      `/api/groups/${id}/profiles?focus=${focus}&align=${align}`,
+    ),
   group: (id: number, focus?: string) => request<GroupDetail>(`/api/groups/${id}${focus ? `?focus=${focus}` : ''}`),
   renameGroup: (id: number, name: string) => request<{ ok: boolean }>(`/api/groups/${id}/name`, { method: 'PUT', body: JSON.stringify({ name }) }),
   model: (variant: string) => request<ModelSummary>(`/api/model?variant=${variant}`),

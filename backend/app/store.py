@@ -443,27 +443,45 @@ def pace_profile(
         return _PROFILE_CACHE[key]
     import numpy as np
 
-    pts = [(p["t_sec"], p["dist_m"]) for p in points if p.get("dist_m") is not None and p.get("t_sec") is not None]
     out: list[list[float]] = []
-    if len(pts) >= 10:
-        t = np.array([p[0] for p in pts], dtype=float)
-        d = np.maximum.accumulate(np.array([p[1] for p in pts], dtype=float))
-        dt = np.diff(t)
-        dd = np.diff(d)
-        moving = (dt > 0) & (dd / np.where(dt > 0, dt, 1.0) >= stopped_mps)
-        moving_t = np.concatenate([[0.0], np.cumsum(np.where(moving, dt, 0.0))])
-        # Distance must strictly increase to interpolate time as a function of distance.
-        keep = np.concatenate([[True], np.diff(d) > 0])
-        d_mi, mt = d[keep] / METERS_PER_MILE, moving_t[keep]
+    curve = moving_time_curve(points, stopped_mps)
+    if curve is not None:
+        d_mi, mt = curve
         total = float(d_mi[-1])
         grid = np.arange(half_window_mi, total - half_window_mi + 1e-9, step_mi)
         if len(grid):
-            t_hi = np.interp(grid + half_window_mi, d_mi, mt)
-            t_lo = np.interp(grid - half_window_mi, d_mi, mt)
-            pace = (t_hi - t_lo) / (2 * half_window_mi)
+            pace = pace_at(curve, grid, half_window_mi)
             out = [[round(float(x), 2), int(min(max(p, 180.0), 1200.0))] for x, p in zip(grid, pace) if p > 0]
     _PROFILE_CACHE[key] = out
     return out
+
+
+def moving_time_curve(points: list[dict], stopped_mps: float = 1.0):
+    """(distance in miles, cumulative moving seconds), both strictly increasing in distance, or
+    None when the track has no usable distance stream. Stopped time (slower than stopped_mps) is
+    not counted."""
+    import numpy as np
+
+    pts = [(p["t_sec"], p["dist_m"]) for p in points if p.get("dist_m") is not None and p.get("t_sec") is not None]
+    if len(pts) < 10:
+        return None
+    t = np.array([p[0] for p in pts], dtype=float)
+    d = np.maximum.accumulate(np.array([p[1] for p in pts], dtype=float))
+    dt = np.diff(t)
+    dd = np.diff(d)
+    moving = (dt > 0) & (dd / np.where(dt > 0, dt, 1.0) >= stopped_mps)
+    moving_t = np.concatenate([[0.0], np.cumsum(np.where(moving, dt, 0.0))])
+    keep = np.concatenate([[True], np.diff(d) > 0])
+    return d[keep] / METERS_PER_MILE, moving_t[keep]
+
+
+def pace_at(curve, x_mi, half_window_mi: float = 0.1):
+    """Pace (sec/mi) at distances x_mi: moving time across [x - w, x + w] over 2w."""
+    import numpy as np
+
+    d_mi, mt = curve
+    x = np.asarray(x_mi, dtype=float)
+    return (np.interp(x + half_window_mi, d_mi, mt) - np.interp(x - half_window_mi, d_mi, mt)) / (2 * half_window_mi)
 
 
 def pace_curve(points: list[dict], window_sec: float = 60.0, every_sec: float = 15.0) -> list[dict]:
