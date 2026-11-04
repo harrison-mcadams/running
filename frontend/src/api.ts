@@ -118,11 +118,12 @@ export interface FeatureRow {
   unit: string
   description: string
   active: boolean
-  coef_sec_per_unit: number
-  ci_low: number
-  ci_high: number
+  detail: string
   typical_swing_sec: number
-  iqr: number
+  swing_low: number
+  swing_high: number
+  q25: number
+  q75: number
   baseline: number
   range: [number, number]
   observed: [number, number]
@@ -151,6 +152,17 @@ export interface ModelSummary {
   r2_in_sample: number
   r2_loo: number
   mae_loo_sec: number
+  mae_guess_sec: number
+  heat_dew_f: number
+  interaction: {
+    early_hour: number
+    late_hour: number
+    per_mile_early: number
+    per_mile_late: number
+    gap_low: number
+    gap_high: number
+    clear: boolean
+  } | null
   baseline: Record<string, number>
   baseline_pace_sec: number
   features: FeatureRow[]

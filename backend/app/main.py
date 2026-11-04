@@ -277,6 +277,7 @@ def api_conditions() -> dict:
         "local_hour": round(now.hour + now.minute / 60.0, 2),
         "temp_f": None,
         "humidity": None,
+        "dew_point_f": None,
         "days_since_last_run": None,
         "recent_7d_miles": 0.0,
         "elev_gain_ft_per_mi": None,
@@ -295,6 +296,7 @@ def api_conditions() -> dict:
             cur = weather.fetch_current(loc["start_lat"], loc["start_lon"])
             if cur:
                 out.update(cur)
+                out["dew_point_f"] = round(weather.dew_point_f(cur["temp_f"], cur["humidity"]), 1)
         dists = sorted(r["distance_mi"] for r in runs[-10:])
         out["distance_mi"] = dists[len(dists) // 2]
         gains = [r["elevation_gain_ft"] / r["distance_mi"] for r in runs[-10:] if r["elevation_gain_ft"] is not None]

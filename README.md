@@ -8,11 +8,14 @@ Fitbit), stores them in SQLite, and gives you three views:
 2. **Routes**: runs grouped automatically by the trail they follow. Pick a route and a run,
    then compare it with the similar runs: direction out, distance tolerance and route
    overlap are all filters.
-3. **Pace model**: a ridge regression of pace on distance, weather, time of day, rest,
-   weekly mileage, hilliness and training time. It reports effect sizes with
-   bootstrap intervals, predicts a pace for a planned run, shows one-factor sensitivity
-   curves, and plots a conditions-adjusted fitness trend. A second variant adds average
-   heart rate as an effort control.
+3. **Pace model**: a ridge regression of pace on distance, dew point (with a heat
+   threshold at 57°F, above which each degree costs much more), time of day, 7-day
+   mileage and training time. Hilliness joins
+   once your routes vary in climbing. Effects are reported from the model's predictions
+   with bootstrap intervals; accuracy is repeated 5-fold cross-validation, shown next to
+   "just guess your average". It predicts a pace for a planned run, shows one-factor
+   sensitivity curves, and plots a conditions-adjusted fitness trend. A second variant
+   adds average heart rate as an effort control. FAIL runs (cut short) are left out.
 
 ## Layout
 

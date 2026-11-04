@@ -30,7 +30,9 @@ export function ModelPage({ version }: { version: number }) {
     const next: Record<string, number> = {}
     for (const f of model.features) {
       const c = (conditions as unknown as Record<string, number | null>)[f.key]
-      next[f.key] = f.key === 'weeks' ? model.last_run.weeks + weeksSince(model.timeline.runs.at(-1)?.date, conditions.date) : c != null ? c : f.baseline
+      if (f.key === 'weeks') next[f.key] = model.last_run.weeks + weeksSince(model.timeline.runs.at(-1)?.date, conditions.date)
+      // Today's value only if it's within what your runs cover (e.g. not 11 pm); otherwise your usual.
+      else next[f.key] = c != null && c >= f.observed[0] && c <= f.observed[1] ? c : f.baseline
     }
     setInputs(next)
     seeded.current = true
@@ -63,7 +65,7 @@ export function ModelPage({ version }: { version: number }) {
       <div className="page-head">
         <div>
           <h1>Pace model</h1>
-          <p>A linear model of your pace fitted to {model.n_runs} runs{leftOut(model.n_fails, model.n_excluded)}: what each factor costs, what you would run today, and whether you are getting faster once conditions are taken out.</p>
+          <p>A model of your pace fitted to {model.n_runs} runs{leftOut(model.n_fails, model.n_excluded)}: what each factor costs, what you would run today, and whether you are getting faster once conditions are taken out.</p>
         </div>
         <div className="seg">
           <button className={variant === 'conditions' ? 'active' : ''} onClick={() => setVariant('conditions')}>Conditions only</button>
@@ -72,22 +74,36 @@ export function ModelPage({ version }: { version: number }) {
       </div>
 
       <div className="tiles">
-        <Tile label="Typical error" value={`±${fmtNum(model.mae_loo_sec)} s/mi`} sub="leave-one-out, so honest about new runs" />
-        <Tile label="Explained" value={`${Math.round(model.r2_loo * 100)}%`} sub={`of pace variation out of sample (${Math.round(model.r2_in_sample * 100)}% in sample)`} />
+        <Tile
+          label="Typical error on unseen runs"
+          value={`±${fmtNum(model.mae_loo_sec)} s/mi`}
+          sub={`vs ±${fmtNum(model.mae_guess_sec)} s/mi by just guessing your average`}
+          tone={model.mae_loo_sec < model.mae_guess_sec ? 'good' : 'bad'}
+        />
+        <Tile label="Explained" value={`${Math.max(0, Math.round(model.r2_loo * 100))}%`} sub={`of pace variation on unseen runs (${Math.round(model.r2_in_sample * 100)}% on the runs it was fit to)`} />
         <Tile label="Fitness trend" value={`${fmtSigned(t.trend_sec_per_month, 1)} s/mi`} sub={`per month, conditions held fixed (${t.trend_sec_per_month < 0 ? 'getting faster' : 'getting slower'})`} tone={t.trend_sec_per_month < 0 ? 'good' : t.trend_sec_per_month > 0 ? 'bad' : undefined} />
-        <Tile label="Baseline run" value={`${fmtPace(model.baseline_pace_sec)} /mi`} sub={`${fmtNum(model.baseline.distance_mi, 1)} mi at ${Math.round(model.baseline.temp_f)}°F, ${Math.round(model.baseline.humidity)}%`} />
+        <Tile label="Baseline run" value={`${fmtPace(model.baseline_pace_sec)} /mi`} sub={`your median run: ${fmtNum(model.baseline.distance_mi, 1)} mi at ${clockLabel(model.baseline.local_hour)}, dew point ${Math.round(model.baseline.dew_point_f)}°F`} />
       </div>
 
       <div className="card" style={{ marginTop: 14 }}>
         <div className="card-head">
           <h2>What moves your pace</h2>
-          <p>Effect of a typical swing in each factor (its middle 50% range), with an 80% bootstrap interval. Right is slower.</p>
+          <p>Change in pace when one factor moves across its middle 50% range, all else at your median run, with an 80% bootstrap interval. Right is slower.</p>
         </div>
         <Coefficients features={model.features} />
+        {model.interaction && (
+          <p className="note">
+            <b>Distance × time of day:</b> an extra mile changes pace by {fmtSigned(model.interaction.per_mile_early, 1)} s/mi for runs starting around{' '}
+            {clockLabel(model.interaction.early_hour)} and {fmtSigned(model.interaction.per_mile_late, 1)} s/mi around {clockLabel(model.interaction.late_hour)}.{' '}
+            {model.interaction.clear
+              ? 'The difference is clear of zero in the bootstrap, though it rests on a modest number of runs.'
+              : 'The bootstrap can\u2019t tell those apart yet, so treat it as a hint.'}
+          </p>
+        )}
         <p className="note">
           {variant === 'effort'
-            ? 'With heart rate in the model, each coefficient is the effect at a fixed effort level.'
-            : 'Factors whose interval straddles zero are not distinguishable from no effect with this many runs. Hilliness only sharpens once your routes vary more in climbing.'}
+            ? 'With heart rate in the model, each effect is at a fixed effort level.'
+            : `Grey dots: the interval crosses zero, so this many runs can\u2019t tell the effect apart from none. Dew point is modelled with a heat threshold at ${model.heat_dew_f}°F, above which humidity costs much more.`}
         </p>
       </div>
 
@@ -225,13 +241,13 @@ function Tile({ label, value, sub, tone }: { label: string; value: string; sub?:
 }
 
 function Coefficients({ features }: { features: FeatureRow[] }) {
-  const extent = Math.max(5, ...features.flatMap((f) => [Math.abs(f.ci_low * f.iqr), Math.abs(f.ci_high * f.iqr), Math.abs(f.typical_swing_sec)]))
+  const extent = Math.max(5, ...features.flatMap((f) => [Math.abs(f.swing_low), Math.abs(f.swing_high), Math.abs(f.typical_swing_sec)]))
   const pos = (v: number) => `${50 + (50 * Math.max(-extent, Math.min(extent, v))) / extent}%`
   return (
     <div>
       {features.map((f) => {
-        const lo = f.ci_low * f.iqr
-        const hi = f.ci_high * f.iqr
+        const lo = f.swing_low
+        const hi = f.swing_high
         const sure = lo > 0 || hi < 0
         if (!f.active)
           return (
@@ -240,7 +256,7 @@ function Coefficients({ features }: { features: FeatureRow[] }) {
                 <b>{f.label}</b>
                 <span>not fitted yet</span>
               </div>
-              <div className="small muted">Your runs only span {fmtNum(f.observed[0], 1)}–{fmtNum(f.observed[1], 1)} {f.unit}; it joins the model once they vary more.</div>
+              <div className="small muted">Most of your runs sit between {fmtNum(f.q25, 0)} and {fmtNum(f.q75, 0)} {f.unit}; it joins the model once they vary more.</div>
               <div className="num muted">–</div>
             </div>
           )
@@ -249,7 +265,7 @@ function Coefficients({ features }: { features: FeatureRow[] }) {
             <div className="label">
               <b>{f.label}</b>
               <span>
-                {fmtSigned(f.coef_sec_per_unit, Math.abs(f.coef_sec_per_unit) < 1 ? 2 : 1)} s/mi per {f.unit} · swing {fmtNum(f.iqr, f.iqr < 2 ? 1 : 0)} {f.unit}
+                {f.detail} · {f.key === 'local_hour' ? `${clockLabel(f.q25)}–${clockLabel(f.q75)}` : `${fmtNum(f.q25, f.q75 - f.q25 < 2 ? 1 : 0)}–${fmtNum(f.q75, f.q75 - f.q25 < 2 ? 1 : 0)} ${f.unit}`}
               </span>
             </div>
             <div className="coef-track">
