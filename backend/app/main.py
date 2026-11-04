@@ -36,6 +36,7 @@ def _startup() -> None:
             except Exception:  # noqa: BLE001
                 log.exception("offline enrichment after import failed")
     sync.on_data_changed(model_service.invalidate)
+    model_service.warm()
 
 
 # --------------------------------------------------------------------------- runs

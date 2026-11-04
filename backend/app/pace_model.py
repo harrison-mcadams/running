@@ -211,6 +211,19 @@ class ModelService:
         with self._lock:
             self._cache.clear()
             self._frame = None
+        self.warm()
+
+    def warm(self) -> None:
+        """Refit in the background so the model page is ready when you open it (fitting takes a
+        few seconds on the Pi)."""
+
+        def run() -> None:
+            try:
+                self.get("conditions")
+            except Exception:  # pragma: no cover - surfaced on the next request instead
+                pass
+
+        threading.Thread(target=run, daemon=True).start()
 
     def get(self, variant: str = "conditions") -> Fitted | None:
         with self._lock:
