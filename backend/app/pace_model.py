@@ -184,6 +184,13 @@ def fit(df: pd.DataFrame, variant: str) -> Fitted | None:
     )
 
 
+def _linear_coefs(model) -> np.ndarray:
+    """[intercept, coef...] of a StandardScaler + Ridge pipeline, in design-matrix units."""
+    scaler, ridge = model[0], model[-1]
+    w = ridge.coef_ / scaler.scale_
+    return np.concatenate([[ridge.intercept_ - float(w @ scaler.mean_)], w])
+
+
 def _with(base: dict[str, float], **kw: float) -> dict[str, float]:
     x = dict(base)
     x.update(kw)
@@ -236,12 +243,21 @@ class ModelService:
         r2_in = 1.0 - float(((y - f.predict_frame(f.df)) ** 2).sum()) / ss_tot if ss_tot else 0.0
         r2_oos = 1.0 - float(((y - f.oof_pred) ** 2).sum()) / ss_tot if ss_tot else 0.0
 
+        # All swings for the fitted model and every bootstrap model in one matrix product:
+        # rows 2i / 2i+1 are the median run with factor i at its 25th / 75th percentile.
+        quart = {k: (float(f.df[k].quantile(0.25)), float(f.df[k].quantile(0.75))) for k in f.keys}
+        frame = pd.DataFrame([_with(f.baseline, **{k: v}) for k in f.keys for v in quart[k]])
+        D = f.design(frame)
+        coefs = np.array([_linear_coefs(m) for m in f.boot_models]) if f.boot_models else np.empty((0, D.shape[1] + 1))
+        boot_pred = coefs[:, 1:] @ D.T + coefs[:, :1] if len(coefs) else np.empty((0, len(frame)))
+        main_pred = f.model.predict(D)
+
         rows = []
-        for k in f.keys:
+        for i, k in enumerate(f.keys):
             _, lab, unit, desc, rng, _ = META[k]
-            q25, q75 = float(f.df[k].quantile(0.25)), float(f.df[k].quantile(0.75))
-            swing = self._swing(f, f.model, k, q25, q75)
-            boot = np.array([self._swing(f, m, k, q25, q75) for m in f.boot_models])
+            q25, q75 = quart[k]
+            swing = float(main_pred[2 * i + 1] - main_pred[2 * i])
+            boot = boot_pred[:, 2 * i + 1] - boot_pred[:, 2 * i]
             if k == "dew_point_f":
                 below = self._slope(f.model, f, k, HEAT_DEW_F - 5)
                 above = self._slope(f.model, f, k, HEAT_DEW_F + 5)
